@@ -112,6 +112,88 @@ export default function InAppMeetingRoom({
   const [liveResponses, setLiveResponses] = useState<any[]>([]);
   const [showPollToast, setShowPollToast] = useState(false);
 
+  const QUESTION_TEMPLATES = [
+    {
+      question: "Which KPI is most critical for measuring immediate search ad profitability?",
+      options: ["Click-Through Rate (CTR)", "Return on Ad Spend (ROAS)", "Cost Per Impression (CPM)", "User Bounce Rate (%)"],
+      correctAnswer: 1
+    },
+    {
+      question: "What is the primary objective of a search engine meta-description tag?",
+      options: ["Directly ranking keyword weights in spiders", "Increasing user Click-Through Rate (CTR) in search results", "Verifying DNS security certificates", "Controlling index crawler frequency rates"],
+      correctAnswer: 1
+    },
+    {
+      question: "What is the main role of the 'temperature' parameter in generative LLMs?",
+      options: ["Governs model memory compression levels", "Enforces sequence padding alignments", "Controls token sampling randomness and creativity", "Restricts maximum context windows"],
+      correctAnswer: 2
+    }
+  ];
+
+  // Trainer Poll creation states
+  const [trainerPollQuestion, setTrainerPollQuestion] = useState("");
+  const [trainerPollOptions, setTrainerPollOptions] = useState<string[]>(["", "", "", ""]);
+  const [trainerPollCorrectAnswer, setTrainerPollCorrectAnswer] = useState<number>(0);
+  const [isPublishingPoll, setIsPublishingPoll] = useState(false);
+
+  const handleLoadTrainerTemplate = (index: number) => {
+    const temp = QUESTION_TEMPLATES[index];
+    setTrainerPollQuestion(temp.question);
+    setTrainerPollOptions([...temp.options]);
+    setTrainerPollCorrectAnswer(temp.correctAnswer);
+  };
+
+  const handleUpdateTrainerOption = (index: number, value: string) => {
+    const updated = [...trainerPollOptions];
+    updated[index] = value;
+    setTrainerPollOptions(updated);
+  };
+
+  const handleInitiateTrainerQuestion = async () => {
+    if (!trainerPollQuestion.trim() || trainerPollOptions.some(o => !o.trim())) return;
+    setIsPublishingPoll(true);
+
+    // Clear previous responses to avoid old results clashing
+    try {
+      const qSnap = await getDocs(collection(db, "live_class_responses"));
+      for (const d of qSnap.docs) {
+        await deleteDoc(doc(db, "live_class_responses", d.id));
+      }
+    } catch (e) {
+      console.warn("Could not clear previous responses:", e);
+    }
+
+    try {
+      const questionId = `q-${Date.now()}`;
+      const qData = {
+        id: questionId,
+        questionText: trainerPollQuestion.trim(),
+        options: trainerPollOptions.map(o => o.trim()),
+        correctAnswer: trainerPollCorrectAnswer,
+        initiatedAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, "config", "live_class"), {
+        activeQuestion: qData
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error initiating question: ", err);
+    } finally {
+      setIsPublishingPoll(false);
+    }
+  };
+
+  const handleClearTrainerQuestion = async () => {
+    try {
+      await setDoc(doc(db, "config", "live_class"), {
+        activeQuestion: null
+      }, { merge: true });
+      setActiveQuestion(null);
+    } catch (err) {
+      console.error("Error clearing question: ", err);
+    }
+  };
+
   // Listen to the active webinar broadcast and polls
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "config", "live_class"), (docSnap) => {
@@ -1004,19 +1086,104 @@ export default function InAppMeetingRoom({
               </div>
 
               {!activeQuestion ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-3">
-                  <div className="w-12 h-12 bg-slate-950 rounded-2xl flex items-center justify-center border border-slate-800">
-                    <Activity className="w-6 h-6 text-slate-700" />
+                isTrainer ? (
+                  /* Trainer Poll Composer */
+                  <div className="space-y-4">
+                    <div className="p-3 bg-indigo-950/20 border border-indigo-900/40 rounded-2xl space-y-2">
+                      <span className="text-[9px] font-black text-indigo-400 block uppercase tracking-wider">
+                        ⚡ Quick Templates:
+                      </span>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {QUESTION_TEMPLATES.map((temp, tIdx) => (
+                          <button
+                            key={tIdx}
+                            onClick={() => handleLoadTrainerTemplate(tIdx)}
+                            className="text-left px-2.5 py-1.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800/80 rounded-lg text-[10px] text-slate-350 font-semibold truncate hover:text-white transition cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Sparkles className="w-3 h-3 text-indigo-400 shrink-0" />
+                            <span>{temp.question}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3.5 bg-slate-900/40 border border-slate-800/60 p-3.5 rounded-2xl">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider block">
+                          Question Text:
+                        </label>
+                        <textarea
+                          placeholder="e.g. Which of the following is..."
+                          value={trainerPollQuestion}
+                          onChange={(e) => setTrainerPollQuestion(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-medium resize-none min-h-[60px]"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-450 uppercase tracking-wider block">
+                          Options & Correct Answer:
+                        </label>
+                        <div className="space-y-1.5">
+                          {trainerPollOptions.map((opt, oIdx) => (
+                            <div key={oIdx} className="flex items-center gap-2">
+                              {/* Radio to select correct answer */}
+                              <button
+                                type="button"
+                                onClick={() => setTrainerPollCorrectAnswer(oIdx)}
+                                className={`w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 cursor-pointer transition ${
+                                  trainerPollCorrectAnswer === oIdx
+                                    ? "bg-emerald-500 border-emerald-400 text-white"
+                                    : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                                }`}
+                                title="Mark as correct answer"
+                              >
+                                {trainerPollCorrectAnswer === oIdx ? (
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                ) : (
+                                  <span className="text-[10px] font-bold">{String.fromCharCode(65 + oIdx)}</span>
+                                )}
+                              </button>
+                              
+                              <input
+                                type="text"
+                                placeholder={`Option ${String.fromCharCode(65 + oIdx)}`}
+                                value={opt}
+                                onChange={(e) => handleUpdateTrainerOption(oIdx, e.target.value)}
+                                className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-medium"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleInitiateTrainerQuestion}
+                        disabled={isPublishingPoll || !trainerPollQuestion.trim() || trainerPollOptions.some(o => !o.trim())}
+                        className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                          !trainerPollQuestion.trim() || trainerPollOptions.some(o => !o.trim())
+                            ? "bg-slate-850 text-slate-500 border border-slate-800 cursor-not-allowed"
+                            : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/10"
+                        }`}
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        {isPublishingPoll ? "Publishing..." : "Launch Poll to Students"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <p className="font-bold text-xs text-slate-350">No Live Poll Active</p>
-                    <p className="text-[10px] text-slate-500 leading-normal">
-                      {isTrainer 
-                        ? "Broadcast a live poll from the 'Meeting Link Dispatcher' under your trainer dashboard to capture real-time feedback." 
-                        : "Waiting for the instructor to broadcast an instant classroom poll. Stay tuned!"}
-                    </p>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-3">
+                    <div className="w-12 h-12 bg-slate-950 rounded-2xl flex items-center justify-center border border-slate-800">
+                      <Activity className="w-6 h-6 text-slate-700" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-bold text-xs text-slate-350">No Live Poll Active</p>
+                      <p className="text-[10px] text-slate-500 leading-normal">
+                        Waiting for the instructor to broadcast an instant classroom poll. Stay tuned!
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )
               ) : (
                 <div className="space-y-4">
                   {/* Active Question Box */}
@@ -1124,6 +1291,14 @@ export default function InAppMeetingRoom({
                   ) : (
                     // Trainer Statistics and Live Responses list inside Meeting Room
                     <div className="space-y-4">
+                      {/* Trainer Actions for Active Poll */}
+                      <button
+                        onClick={handleClearTrainerQuestion}
+                        className="w-full py-2 bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> End & Clear Current Poll
+                      </button>
+
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
                           <span>📊 Responses breakdown</span>

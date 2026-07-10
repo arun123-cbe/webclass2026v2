@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper to validate alphanumeric/hyphen/underscore IDs
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.\\s]+$');
+    }
+
+    // --- Entity validations ---
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['name', 'email'])
+        && data.name is string && data.name.size() <= 128
+        && data.email is string && data.email.size() <= 128;
+    }
+
+    function isValidForumPost(data) {
+      return data.keys().hasAll(['title', 'content', 'authorName', 'authorEmail', 'createdAt', 'upvotes', 'upvotedBy'])
+        && data.title is string && data.title.size() <= 200
+        && data.content is string && data.content.size() <= 10000
+        && data.authorName is string && data.authorName.size() <= 128
+        && data.authorEmail is string && data.authorEmail.size() <= 128
+        && data.createdAt is string
+        && data.upvotes is int
+        && data.upvotedBy is list;
+    }
+
+    function isValidForumReply(data) {
+      return data.keys().hasAll(['postId', 'content', 'authorName', 'authorEmail', 'createdAt'])
+        && data.postId is string && data.postId.size() <= 128
+        && data.content is string && data.content.size() <= 5000
+        && data.authorName is string && data.authorName.size() <= 128
+        && data.authorEmail is string && data.authorEmail.size() <= 128
+        && data.createdAt is string;
+    }
+
+    function isValidMeeting(data) {
+      return data.keys().hasAll(['title', 'url', 'targetType', 'createdAt', 'active'])
+        && data.title is string && data.title.size() <= 200
+        && data.url is string && data.url.size() <= 500
+        && data.targetType is string
+        && data.createdAt is string
+        && data.active is bool;
+    }
+
+    function isValidConfig(data) {
+      return data.keys().hasAny(['modules', 'active', 'topic', 'meetingUrl', 'castedLessonId', 'screenSharingActive', 'activeQuestion']);
+    }
+
+    function isValidLiveClassResponse(data) {
+      return data.keys().hasAll(['questionId', 'studentEmail', 'studentName', 'selectedOptionIndex', 'isCorrect', 'submittedAt'])
+        && data.questionId is string && data.questionId.size() <= 128
+        && data.studentEmail is string && data.studentEmail.size() <= 128
+        && data.studentName is string && data.studentName.size() <= 128
+        && data.selectedOptionIndex is int
+        && data.isCorrect is bool
+        && data.submittedAt is string;
+    }
+
+    // --- Path Rules ---
+
+    match /students/{studentId} {
+      allow read: if true;
+      allow write: if isValidId(studentId) && isValidStudent(request.resource.data);
+    }
+
+    match /forum_posts/{postId} {
+      allow read: if true;
+      allow write: if isValidId(postId) && isValidForumPost(request.resource.data);
+
+      match /replies/{replyId} {
+        allow read: if true;
+        allow write: if isValidId(replyId) && isValidForumReply(request.resource.data);
+      }
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if true;
+      allow write: if isValidId(meetingId) && isValidMeeting(request.resource.data);
+    }
+
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isValidId(docId) && isValidConfig(request.resource.data);
+    }
+
+    match /live_class_responses/{responseId} {
+      allow read: if true;
+      allow write: if isValidId(responseId) && isValidLiveClassResponse(request.resource.data);
+    }
+
+    // Default safety catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

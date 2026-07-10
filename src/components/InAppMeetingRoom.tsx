@@ -570,7 +570,7 @@ export default function InAppMeetingRoom({
               <div className="flex-1 min-h-[400px] bg-slate-900 border border-slate-850 rounded-2xl overflow-hidden relative shadow-lg flex items-center justify-center">
                 <iframe
                   allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                  src={getJitsiUrl(meetingUrl || `https://meet.jit.si/cohort-room-default`, studentName)}
+                  src={getJitsiUrl(meetingUrl || `https://meet.ffmuc.net/cohort-room-default`, studentName)}
                   style={{ width: '100%', height: '100%', border: '0px' }}
                 ></iframe>
               </div>

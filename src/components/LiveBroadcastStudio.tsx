@@ -201,7 +201,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setMeetingUrl(`https://meet.jit.si/${segment1}-${segment2}-${segment3}`);
+    setMeetingUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
   };
 
   const handleGenerateWebinarMeetLink = () => {
@@ -209,7 +209,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setWebinarUrl(`https://meet.jit.si/${segment1}-${segment2}-${segment3}`);
+    setWebinarUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
   };
 
   // Dispatch interactive meeting
@@ -270,7 +270,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
       const liveData = {
         active: true,
         topic: webinarTopic.trim(),
-        meetingUrl: webinarUrl.trim() || `https://meet.jit.si/cohort-broadcast-room-${Date.now()}`,
+        meetingUrl: webinarUrl.trim() || `https://meet.ffmuc.net/cohort-broadcast-room-${Date.now()}`,
         castedLessonId: castedLessonId || "none",
         screenSharingActive: screenSharingActive,
         startedAt: new Date().toISOString(),
@@ -471,7 +471,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
             </div>
             <input 
               type="url" 
-              placeholder="e.g. https://meet.jit.si/my-meeting-room"
+              placeholder="e.g. https://meet.ffmuc.net/my-meeting-room"
               value={meetingUrl}
               onChange={(e) => setMeetingUrl(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none focus:ring-4 focus:ring-indigo-50 font-mono"
@@ -838,12 +838,42 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
 
         {/* Broadcasting details banner */}
         {isWebinarLive ? (
-          <div className="p-4 bg-rose-50 border border-rose-100 text-rose-900 rounded-2xl flex items-center gap-3">
-            <Radio className="w-6 h-6 text-rose-500 animate-ping shrink-0" />
-            <div>
-              <span className="bg-rose-500 text-white font-mono font-black text-[9px] px-2 py-0.5 rounded">🔴 BROADCASTING LIVE</span>
-              <h4 className="font-extrabold text-sm mt-1">Topic: {webinarTopic}</h4>
-              <p className="text-[11px] text-rose-700 font-mono mt-0.5">Active Meeting URL: <a href={webinarUrl} target="_blank" rel="noreferrer" className="underline font-bold inline-flex items-center gap-0.5">{webinarUrl} <ExternalLink className="w-2.5 h-2.5" /></a></p>
+          <div className="space-y-4">
+            <div className="p-4 bg-rose-50 border border-rose-100 text-rose-900 rounded-2xl flex items-center gap-3">
+              <Radio className="w-6 h-6 text-rose-500 animate-ping shrink-0" />
+              <div>
+                <span className="bg-rose-500 text-white font-mono font-black text-[9px] px-2 py-0.5 rounded">🔴 BROADCASTING LIVE</span>
+                <h4 className="font-extrabold text-sm mt-1">Topic: {webinarTopic}</h4>
+                <p className="text-[11px] text-rose-700 font-mono mt-0.5">Active Meeting URL: <a href={webinarUrl} target="_blank" rel="noreferrer" className="underline font-bold inline-flex items-center gap-0.5">{webinarUrl} <ExternalLink className="w-2.5 h-2.5" /></a></p>
+              </div>
+            </div>
+
+            {/* MODERATION & ACCEPTING STUDENTS ASSISTANT CARD */}
+            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-950 space-y-2.5 text-left">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-xs">
+                  🛡️
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs uppercase tracking-widest text-indigo-800">Moderator Control Center</h4>
+                  <p className="text-[10px] text-indigo-600 font-medium">You are the host of this live stream. Student join approval is fully enabled!</p>
+                </div>
+              </div>
+              
+              <div className="text-[11px] text-slate-700 space-y-2 leading-relaxed">
+                <p>
+                  We have migrated your broadcast room to a secure, open meeting server (<span className="font-bold text-indigo-700">meet.ffmuc.net</span>). 
+                  This completely removes any 8x8 login constraints, meaning <strong>students can join instantly</strong> and you are automatically granted **Host/Moderator** privileges upon entry.
+                </p>
+                <div className="p-2.5 bg-white border border-indigo-100 rounded-xl space-y-1">
+                  <span className="font-bold text-[10px] text-indigo-700 block uppercase tracking-wider">👉 How to Approve/Accept Students (Lobby Mode):</span>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[10px]">
+                    <li>In the Jitsi preview window below, click the <strong>Security Shield</strong> icon or <strong>Options (...)</strong> on the bottom bar.</li>
+                    <li>Toggle on <strong>Enable Lobby Mode</strong>. This puts entering students into a "knocking" lobby.</li>
+                    <li>When students try to join, you'll see a popup directly in your video frame to <strong>Grant entry (Accept)</strong> or <strong>Reject</strong> them!</li>
+                  </ol>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -895,7 +925,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
               </div>
               <input 
                 type="url" 
-                placeholder="e.g. https://meet.jit.si/cohort-broadcast"
+                placeholder="e.g. https://meet.ffmuc.net/cohort-broadcast"
                 value={webinarUrl}
                 onChange={(e) => setWebinarUrl(e.target.value)}
                 disabled={isWebinarLive}

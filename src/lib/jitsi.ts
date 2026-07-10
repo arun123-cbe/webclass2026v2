@@ -6,13 +6,19 @@
 export function getJitsiUrl(url: string, displayName?: string): string {
   if (!url) return "";
 
+  // Automatically rewrite meet.jit.si to meet.ffmuc.net to bypass moderator/host login requirements
+  let baseProcessedUrl = url;
+  if (url.includes("meet.jit.si")) {
+    baseProcessedUrl = url.replace("meet.jit.si", "meet.ffmuc.net");
+  }
+
   // Extract base URL and existing hash parameters
-  const hashIndex = url.indexOf("#");
-  let baseUrl = url;
+  const hashIndex = baseProcessedUrl.indexOf("#");
+  let baseUrl = baseProcessedUrl;
   let hashParams = "";
   if (hashIndex !== -1) {
-    baseUrl = url.substring(0, hashIndex);
-    hashParams = url.substring(hashIndex + 1);
+    baseUrl = baseProcessedUrl.substring(0, hashIndex);
+    hashParams = baseProcessedUrl.substring(hashIndex + 1);
   }
 
   const params: string[] = [];

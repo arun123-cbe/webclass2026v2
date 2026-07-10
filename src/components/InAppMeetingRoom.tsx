@@ -566,11 +566,33 @@ export default function InAppMeetingRoom({
           {activePanel === "room" && (
             <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto min-h-0">
               
+              {/* IFRAME HELPER BANNER CARD */}
+              <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-xs">
+                    <Shield className="w-4 h-4 text-indigo-400" />
+                    <span>In-App Live Streaming Arena</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-normal max-w-xl">
+                    Because of security constraints, Jitsi Meet requires the Instructor to start the session first. If you are stuck at "Waiting for moderator" or get iframe errors, you can launch the classroom cleanly in a new tab!
+                  </p>
+                </div>
+                
+                <a 
+                  href={meetingUrl || `https://meet.jit.si/cohort-room-default`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl cursor-pointer flex items-center gap-1 transition shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Join in New Tab
+                </a>
+              </div>
+
               {/* REAL JITSI MEET IFRAME */}
               <div className="flex-1 min-h-[400px] bg-slate-900 border border-slate-850 rounded-2xl overflow-hidden relative shadow-lg flex items-center justify-center">
                 <iframe
                   allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                  src={getJitsiUrl(meetingUrl || `https://meet.ffmuc.net/cohort-room-default`, studentName)}
+                  src={getJitsiUrl(meetingUrl || `https://meet.jit.si/cohort-room-default`, studentName)}
                   style={{ width: '100%', height: '100%', border: '0px' }}
                 ></iframe>
               </div>

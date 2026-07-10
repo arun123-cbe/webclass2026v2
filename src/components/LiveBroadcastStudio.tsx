@@ -201,7 +201,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setMeetingUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
+    setMeetingUrl(`https://meet.jit.si/${segment1}-${segment2}-${segment3}`);
   };
 
   const handleGenerateWebinarMeetLink = () => {
@@ -209,7 +209,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setWebinarUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
+    setWebinarUrl(`https://meet.jit.si/${segment1}-${segment2}-${segment3}`);
   };
 
   // Dispatch interactive meeting
@@ -270,7 +270,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
       const liveData = {
         active: true,
         topic: webinarTopic.trim(),
-        meetingUrl: webinarUrl.trim() || `https://meet.ffmuc.net/cohort-broadcast-room-${Date.now()}`,
+        meetingUrl: webinarUrl.trim() || `https://meet.jit.si/cohort-broadcast-room-${Date.now()}`,
         castedLessonId: castedLessonId || "none",
         screenSharingActive: screenSharingActive,
         startedAt: new Date().toISOString(),
@@ -471,7 +471,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
             </div>
             <input 
               type="url" 
-              placeholder="e.g. https://meet.ffmuc.net/my-meeting-room"
+              placeholder="e.g. https://meet.jit.si/my-meeting-room"
               value={meetingUrl}
               onChange={(e) => setMeetingUrl(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none focus:ring-4 focus:ring-indigo-50 font-mono"
@@ -849,28 +849,43 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
             </div>
 
             {/* MODERATION & ACCEPTING STUDENTS ASSISTANT CARD */}
-            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-950 space-y-2.5 text-left">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-xs">
-                  🛡️
+            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-950 space-y-3.5 text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-xs">
+                    🛡️
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-xs uppercase tracking-widest text-indigo-800">Moderator Control Center</h4>
+                    <p className="text-[10px] text-indigo-600 font-medium">Initialize meeting room security & moderation permissions</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-extrabold text-xs uppercase tracking-widest text-indigo-800">Moderator Control Center</h4>
-                  <p className="text-[10px] text-indigo-600 font-medium">You are the host of this live stream. Student join approval is fully enabled!</p>
-                </div>
+
+                <a
+                  href={webinarUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow transition self-start sm:self-auto"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Launch Host Workspace (New Tab)
+                </a>
               </div>
               
-              <div className="text-[11px] text-slate-700 space-y-2 leading-relaxed">
-                <p>
-                  We have migrated your broadcast room to a secure, open meeting server (<span className="font-bold text-indigo-700">meet.ffmuc.net</span>). 
-                  This completely removes any 8x8 login constraints, meaning <strong>students can join instantly</strong> and you are automatically granted **Host/Moderator** privileges upon entry.
-                </p>
-                <div className="p-2.5 bg-white border border-indigo-100 rounded-xl space-y-1">
-                  <span className="font-bold text-[10px] text-indigo-700 block uppercase tracking-wider">👉 How to Approve/Accept Students (Lobby Mode):</span>
+              <div className="text-[11px] text-slate-700 space-y-2.5 leading-relaxed">
+                <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl space-y-1">
+                  <span className="font-bold text-[10px] text-amber-800 block uppercase tracking-wider">⚠️ CRITICAL: Host Authentication Required</span>
+                  <p className="text-slate-600 text-[10px] leading-normal">
+                    Due to browser iframe security restrictions, you <strong>cannot sign in as host inside the iframe below</strong>. 
+                    You must click the <strong>Launch Host Workspace (New Tab)</strong> button above, then click <strong>"Log-in"</strong> on the Jitsi page to authenticate (with Google, GitHub, or Facebook) and start the meeting.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-white border border-indigo-100 rounded-xl space-y-1">
+                  <span className="font-bold text-[10px] text-indigo-700 block uppercase tracking-wider">👉 How to Approve / Accept Students:</span>
                   <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[10px]">
-                    <li>In the Jitsi preview window below, click the <strong>Security Shield</strong> icon or <strong>Options (...)</strong> on the bottom bar.</li>
-                    <li>Toggle on <strong>Enable Lobby Mode</strong>. This puts entering students into a "knocking" lobby.</li>
-                    <li>When students try to join, you'll see a popup directly in your video frame to <strong>Grant entry (Accept)</strong> or <strong>Reject</strong> them!</li>
+                    <li>In the new Jitsi tab, click the <strong>Security Shield</strong> icon on the bottom right.</li>
+                    <li>Toggle on <strong>Enable Lobby Mode</strong>. Students will now have to "knock" to enter.</li>
+                    <li>Whenever students try to join, a prompt will pop up in your workspace allowing you to <strong>Grant Entry</strong> or <strong>Reject</strong> them!</li>
                   </ol>
                 </div>
               </div>
@@ -925,7 +940,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
               </div>
               <input 
                 type="url" 
-                placeholder="e.g. https://meet.ffmuc.net/cohort-broadcast"
+                placeholder="e.g. https://meet.jit.si/cohort-broadcast"
                 value={webinarUrl}
                 onChange={(e) => setWebinarUrl(e.target.value)}
                 disabled={isWebinarLive}
@@ -993,10 +1008,22 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
         <div className="space-y-2 p-4 bg-slate-950 rounded-2xl text-left">
           <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
             <span>📺 BROADCAST MONITOR VIEW (LOCAL PREVIEW)</span>
-            <span className="flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${isWebinarLive ? "bg-emerald-500 animate-ping" : "bg-slate-600"}`}></span>
-              {isWebinarLive ? "STREAM ACTIVE" : "PREVIEW OFFLINE"}
-            </span>
+            <div className="flex items-center gap-3">
+              {isWebinarLive && webinarUrl && (
+                <a
+                  href={webinarUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 underline font-black"
+                >
+                  Open in New Tab ↗
+                </a>
+              )}
+              <span className="flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${isWebinarLive ? "bg-emerald-500 animate-ping" : "bg-slate-600"}`}></span>
+                {isWebinarLive ? "STREAM ACTIVE" : "PREVIEW OFFLINE"}
+              </span>
+            </div>
           </div>
           
           {(() => {

@@ -65,6 +65,20 @@ export default function InAppMeetingRoom({
   courseModules,
   activeLessonId
 }: InAppMeetingRoomProps) {
+  // Generate the direct app-embedded URL for opening in a new tab
+  const getAppMeetingRoomUrl = () => {
+    const base = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    params.set("meetingUrl", meetingUrl || "https://meet.senf.im/cohort-room-default");
+    params.set("meetingTitle", meetingTitle);
+    params.set("studentName", studentName);
+    params.set("studentEmail", studentEmail);
+    if (isTrainer) {
+      params.set("isTrainer", "true");
+    }
+    return `${base}?${params.toString()}`;
+  };
+
   // Tabs for the main panel: "room" | "whiteboard" | "iframe"
   const [activePanel, setActivePanel] = useState<"room" | "whiteboard" | "iframe">("room");
   
@@ -912,12 +926,12 @@ export default function InAppMeetingRoom({
                     <span>In-App Live Streaming Arena</span>
                   </div>
                   <p className="text-[10px] text-slate-400 leading-normal max-w-xl">
-                    Our live stream is hosted on a secure, open meeting server (meet.ffmuc.net) with no login required. If you experience browser iframe blocks, you can launch the session cleanly in a new tab!
+                    Our live stream is hosted on a secure, open meeting server (meet.senf.im) with no login required. If you experience browser iframe blocks, you can launch the interactive session cleanly in a new tab!
                   </p>
                 </div>
                 
                 <a 
-                  href={meetingUrl || `https://meet.ffmuc.net/cohort-room-default`}
+                  href={getAppMeetingRoomUrl()}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl cursor-pointer flex items-center gap-1 transition shrink-0"
@@ -930,7 +944,7 @@ export default function InAppMeetingRoom({
               <div className="flex-1 min-h-[400px] bg-slate-900 border border-slate-850 rounded-2xl overflow-hidden relative shadow-lg flex items-center justify-center">
                 <iframe
                   allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                  src={getJitsiUrl(meetingUrl || `https://meet.ffmuc.net/cohort-room-default`, studentName)}
+                  src={getJitsiUrl(meetingUrl || `https://meet.senf.im/cohort-room-default`, studentName)}
                   style={{ width: '100%', height: '100%', border: '0px' }}
                 ></iframe>
               </div>

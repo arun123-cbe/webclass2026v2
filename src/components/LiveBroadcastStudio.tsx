@@ -253,7 +253,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setMeetingUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
+    setMeetingUrl(`https://meet.senf.im/${segment1}-${segment2}-${segment3}`);
   };
 
   const handleGenerateWebinarMeetLink = () => {
@@ -261,7 +261,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setWebinarUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
+    setWebinarUrl(`https://meet.senf.im/${segment1}-${segment2}-${segment3}`);
   };
 
   // Dispatch interactive meeting
@@ -322,7 +322,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
       const liveData = {
         active: true,
         topic: webinarTopic.trim(),
-        meetingUrl: webinarUrl.trim() || `https://meet.ffmuc.net/cohort-broadcast-room-${Date.now()}`,
+        meetingUrl: webinarUrl.trim() || `https://meet.senf.im/cohort-broadcast-room-${Date.now()}`,
         castedLessonId: castedLessonId || "none",
         screenSharingActive: screenSharingActive,
         startedAt: new Date().toISOString(),
@@ -523,7 +523,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
             </div>
             <input 
               type="url" 
-              placeholder="e.g. https://meet.ffmuc.net/my-meeting-room"
+              placeholder="e.g. https://meet.senf.im/my-meeting-room"
               value={meetingUrl}
               onChange={(e) => setMeetingUrl(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none focus:ring-4 focus:ring-indigo-50 font-mono"
@@ -909,7 +909,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
                   </div>
                   <div>
                     <h4 className="font-extrabold text-xs uppercase tracking-widest text-indigo-800">Moderator Control Center</h4>
-                    <p className="text-[10px] text-indigo-600 font-medium">Classroom hosted on secure open-source server (meet.ffmuc.net)</p>
+                    <p className="text-[10px] text-indigo-600 font-medium">Classroom hosted on secure open-source server (meet.senf.im)</p>
                   </div>
                 </div>
 
@@ -927,7 +927,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
                 <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl space-y-1">
                   <span className="font-bold text-[10px] text-emerald-800 block uppercase tracking-wider">✅ Seamless Access Enabled</span>
                   <p className="text-slate-600 text-[10px] leading-normal">
-                    We've routed your classroom through the free, open-source <strong>meet.ffmuc.net</strong> server. This completely bypasses Jitsi's 8x8 login requirements! You and your students can connect instantly inside the frame without needing accounts.
+                    We've routed your classroom through the free, open-source <strong>meet.senf.im</strong> server. This completely bypasses Jitsi's 8x8 login requirements! You and your students can connect instantly inside the frame without needing accounts.
                   </p>
                 </div>
 
@@ -991,7 +991,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
               </div>
               <input 
                 type="url" 
-                placeholder="e.g. https://meet.ffmuc.net/cohort-broadcast"
+                placeholder="e.g. https://meet.senf.im/cohort-broadcast"
                 value={webinarUrl}
                 onChange={(e) => setWebinarUrl(e.target.value)}
                 disabled={isWebinarLive}

@@ -416,16 +416,51 @@ export default function App() {
 
   // Load enrolled session from localStorage on mount
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const qMeetingUrl = urlParams.get("meetingUrl");
+    const qMeetingTitle = urlParams.get("meetingTitle");
+    const qStudentName = urlParams.get("studentName");
+    const qStudentEmail = urlParams.get("studentEmail");
+    const qIsTrainer = urlParams.get("isTrainer");
+
+    let isTrainerFromUrl = false;
+    if (qMeetingUrl && qMeetingTitle) {
+      setActiveInAppMeetingUrl(qMeetingUrl);
+      setActiveInAppMeetingTitle(qMeetingTitle);
+      
+      if (qIsTrainer === "true") {
+        setIsTrainer(true);
+        isTrainerFromUrl = true;
+      }
+      
+      if (qStudentName && qStudentEmail) {
+        const urlStudent = {
+          id: `student_${qStudentEmail.replace(/[^a-zA-Z0-9]/g, "_")}`,
+          name: qStudentName,
+          email: qStudentEmail,
+          courseCategory: "Digital Marketing",
+          goal: "Join meeting room via direct link",
+          enrolledAt: new Date().toISOString(),
+          progress: {}
+        };
+        setStudent(urlStudent);
+      }
+    }
+
     const savedSession = localStorage.getItem("marketing_student_session");
     if (savedSession) {
       try {
         const parsed = JSON.parse(savedSession);
-        setStudent(parsed);
-        syncStudentFromFirestore(parsed.email, parsed);
+        if (!qStudentEmail) {
+          setStudent(parsed);
+          syncStudentFromFirestore(parsed.email, parsed);
+        }
         
-        getDoc(doc(db, "trainers", parsed.email.toLowerCase())).then(snap => {
-          setIsTrainer(snap.exists() || parsed.email.toLowerCase() === 'gouthamarun123@gmail.com' || parsed.email.toLowerCase().includes('admin') || parsed.email.toLowerCase().includes('mike'));
-        }).catch(() => setIsTrainer(parsed.email.toLowerCase() === 'gouthamarun123@gmail.com' || parsed.email.toLowerCase().includes('admin') || parsed.email.toLowerCase().includes('mike')));
+        if (!isTrainerFromUrl) {
+          getDoc(doc(db, "trainers", parsed.email.toLowerCase())).then(snap => {
+            setIsTrainer(snap.exists() || parsed.email.toLowerCase() === 'gouthamarun123@gmail.com' || parsed.email.toLowerCase().includes('admin') || parsed.email.toLowerCase().includes('mike'));
+          }).catch(() => setIsTrainer(parsed.email.toLowerCase() === 'gouthamarun123@gmail.com' || parsed.email.toLowerCase().includes('admin') || parsed.email.toLowerCase().includes('mike')));
+        }
       } catch (e) {
         console.error("Error reading saved session:", e);
       }

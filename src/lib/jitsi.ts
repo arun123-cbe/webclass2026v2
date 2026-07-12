@@ -6,13 +6,19 @@
 export function getJitsiUrl(url: string, displayName?: string): string {
   if (!url) return "";
 
+  // Automatically map meet.ffmuc.net to meet.senf.im for excellent iframe embedding compatibility
+  let normalizedUrl = url;
+  if (normalizedUrl.includes("meet.ffmuc.net")) {
+    normalizedUrl = normalizedUrl.replace("meet.ffmuc.net", "meet.senf.im");
+  }
+
   // Extract base URL and existing hash parameters
-  const hashIndex = url.indexOf("#");
-  let baseUrl = url;
+  const hashIndex = normalizedUrl.indexOf("#");
+  let baseUrl = normalizedUrl;
   let hashParams = "";
   if (hashIndex !== -1) {
-    baseUrl = url.substring(0, hashIndex);
-    hashParams = url.substring(hashIndex + 1);
+    baseUrl = normalizedUrl.substring(0, hashIndex);
+    hashParams = normalizedUrl.substring(hashIndex + 1);
   }
 
   const params: string[] = [];

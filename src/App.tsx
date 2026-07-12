@@ -35,6 +35,7 @@ import {
   Check,
   Users,
   Radio,
+  ExternalLink,
   LayoutDashboard,
   X
 } from "lucide-react";
@@ -46,6 +47,7 @@ import DiscussionForum from "./components/DiscussionForum";
 import TrainerDashboard from "./components/TrainerDashboard";
 import StudentDashboard from "./components/StudentDashboard";
 import InAppMeetingRoom from "./components/InAppMeetingRoom";
+import JitsiEmbed from "./components/JitsiEmbed";
 import { getJitsiUrl } from "./lib/jitsi";
 import { db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { doc, setDoc, getDoc, onSnapshot, collection, query, where, orderBy } from "firebase/firestore";
@@ -2006,12 +2008,89 @@ Professor Michael Vance, Department of Growth Analytics
                                     <p className="text-[10px] text-indigo-300 max-w-sm mx-auto leading-relaxed">You are currently attending the live conference in the secured overlay. Close the full-screen view to return here.</p>
                                   </div>
                                 ) : liveClass?.active && liveClass.meetingUrl ? (
-                                  <iframe
-                                    allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                                    src={getJitsiUrl(liveClass.meetingUrl, student?.name)}
-                                    className="w-full h-full border-0"
-                                    title="Live Classroom Feed"
-                                  />
+                                  liveClass.meetingUrl.includes("meet.google.com") || liveClass.meetingUrl.includes("google.com") ? (
+                                    <div className="flex-1 flex flex-col justify-center items-center text-center p-6 bg-slate-950 rounded-2xl border border-white/5 space-y-6">
+                                      <div className="relative">
+                                        <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-2xl animate-pulse"></div>
+                                        <div className="relative w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-xl">
+                                          <Video className="w-8 h-8" />
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-2 max-w-md mx-auto">
+                                        <span className="px-2.5 py-0.5 bg-emerald-500/15 text-emerald-400 text-[9px] font-black rounded-full uppercase tracking-wider border border-emerald-500/10 inline-flex items-center gap-1">
+                                          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span>
+                                          Google Meet Live Companion Active
+                                        </span>
+                                        <h5 className="text-sm font-black text-white">{liveClass.topic || "Growth Cohort Live Briefing"}</h5>
+                                        <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
+                                          Security protocols block Google Meet from being loaded directly inside an embedded frame. Launch the live class in an external window, and keep this workspace open!
+                                        </p>
+                                      </div>
+
+                                      <div className="w-full max-w-sm bg-slate-900/60 border border-white/5 rounded-xl p-4 space-y-3 text-left">
+                                        <div className="flex gap-2">
+                                          <input 
+                                            type="text" 
+                                            readOnly 
+                                            value={liveClass.meetingUrl}
+                                            className="flex-1 px-3 py-1.5 bg-black/40 border border-white/5 rounded-lg text-[10px] text-slate-300 font-mono select-all focus:outline-none"
+                                          />
+                                          <button
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(liveClass.meetingUrl);
+                                            }}
+                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg transition shrink-0"
+                                          >
+                                            Copy Link
+                                          </button>
+                                        </div>
+
+                                        <a 
+                                          href={liveClass.meetingUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-lg text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md text-center"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" /> Launch Google Meet Session
+                                        </a>
+                                      </div>
+
+                                      <div className="p-3 bg-indigo-950/40 border border-indigo-900/40 rounded-xl text-left flex items-start gap-2.5 max-w-md">
+                                        <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5 animate-pulse" />
+                                        <div className="space-y-0.5">
+                                          <h6 className="font-bold text-[9px] text-indigo-300 uppercase tracking-wider font-mono">Real-Time Sync Active</h6>
+                                          <p className="text-[10px] text-slate-300 leading-normal">
+                                            Keep this workspace open side-by-side with your Google Meet. The dynamic lecture polls, instructor questions, and syllabus materials will continue to update here in real-time!
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex-1 flex flex-col h-full min-h-[400px]">
+                                      {/* Embedded Jitsi Stream Quick Control Bar */}
+                                      <div className="p-2.5 bg-indigo-950/60 border-b border-white/10 flex items-center justify-between text-[10px] text-slate-300">
+                                        <span className="flex items-center gap-1.5 px-2 font-bold text-indigo-200">
+                                          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span>
+                                          Live Jitsi Class Broadcast
+                                        </span>
+                                        <a 
+                                          href={liveClass.meetingUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-indigo-300 hover:text-white font-black flex items-center gap-1 bg-white/10 hover:bg-white/15 px-2 py-1 rounded-lg transition"
+                                        >
+                                          <ExternalLink className="w-3 h-3" /> External Tab
+                                        </a>
+                                      </div>
+                                      <div className="w-full flex-1 min-h-[380px] bg-slate-950 rounded-2xl overflow-hidden">
+                                        <JitsiEmbed
+                                          roomUrl={liveClass.meetingUrl}
+                                          displayName={student?.name || "Student"}
+                                        />
+                                      </div>
+                                    </div>
+                                  )
                                 ) : (
                                   <div className="text-center space-y-2 p-4">
                                     <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-indigo-300 mx-auto">
@@ -2827,6 +2906,7 @@ Professor Michael Vance, Department of Growth Analytics
                 meetingUrl={activeInAppMeetingUrl}
                 studentName={student.name}
                 studentEmail={student.email}
+                isTrainer={isTrainer}
                 onLeave={() => {
                   setActiveInAppMeetingUrl(null);
                   setActiveInAppMeetingTitle(null);

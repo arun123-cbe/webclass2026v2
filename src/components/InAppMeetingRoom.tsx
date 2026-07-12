@@ -31,6 +31,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
 import { getJitsiUrl } from "../lib/jitsi";
+import JitsiEmbed from "./JitsiEmbed";
 import { 
   collection, 
   doc, 
@@ -69,7 +70,7 @@ export default function InAppMeetingRoom({
   const getAppMeetingRoomUrl = () => {
     const base = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
-    params.set("meetingUrl", meetingUrl || "https://meet.senf.im/cohort-room-default");
+    params.set("meetingUrl", meetingUrl || "https://meet.jit.si/csdg-digital-growth-cohort");
     params.set("meetingTitle", meetingTitle);
     params.set("studentName", studentName);
     params.set("studentEmail", studentEmail);
@@ -79,8 +80,15 @@ export default function InAppMeetingRoom({
     return `${base}?${params.toString()}`;
   };
 
-  // Tabs for the main panel: "room" | "whiteboard" | "iframe"
-  const [activePanel, setActivePanel] = useState<"room" | "whiteboard" | "iframe">("room");
+  // Tabs for the main panel: "room" | "whiteboard"
+  const [activePanel, setActivePanel] = useState<"room" | "whiteboard">("room");
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(meetingUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
   
   // Media states
   const [cameraEnabled, setCameraEnabled] = useState(false);
@@ -679,19 +687,13 @@ export default function InAppMeetingRoom({
               onClick={() => setActivePanel("room")}
               className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${activePanel === "room" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
             >
-              <Tv className="w-3.5 h-3.5" /> Webinar Room
+              <Tv className="w-3.5 h-3.5" /> Google Meet Portal
             </button>
             <button 
               onClick={() => setActivePanel("whiteboard")}
               className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${activePanel === "whiteboard" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
             >
               <Palette className="w-3.5 h-3.5" /> Interactive Board
-            </button>
-            <button 
-              onClick={() => setActivePanel("iframe")}
-              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${activePanel === "iframe" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
-            >
-              <Monitor className="w-3.5 h-3.5" /> Sandbox Frame
             </button>
           </div>
 
@@ -712,19 +714,13 @@ export default function InAppMeetingRoom({
           onClick={() => setActivePanel("room")}
           className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${activePanel === "room" ? "bg-indigo-600 text-white" : "text-slate-400"}`}
         >
-          <Tv className="w-3 h-3" /> Room
+          <Tv className="w-3.5 h-3.5" /> Google Meet Portal
         </button>
         <button 
           onClick={() => setActivePanel("whiteboard")}
           className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${activePanel === "whiteboard" ? "bg-indigo-600 text-white" : "text-slate-400"}`}
         >
-          <Palette className="w-3 h-3" /> Whiteboard
-        </button>
-        <button 
-          onClick={() => setActivePanel("iframe")}
-          className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${activePanel === "iframe" ? "bg-indigo-600 text-white" : "text-slate-400"}`}
-        >
-          <Monitor className="w-3 h-3" /> Frame
+          <Palette className="w-3.5 h-3.5" /> Interactive Board
         </button>
       </div>
 
@@ -916,58 +912,133 @@ export default function InAppMeetingRoom({
           
           {/* VIEWPORT 1: MAIN WEBINAR ROOM */}
           {activePanel === "room" && (
-            <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto min-h-0">
-              
-              {/* IFRAME HELPER BANNER CARD */}
-              <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-xs">
-                    <Shield className="w-4 h-4 text-indigo-400" />
-                    <span>In-App Live Streaming Arena</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 leading-normal max-w-xl">
-                    Our live stream is hosted on a secure, open meeting server (meet.senf.im) with no login required. If you experience browser iframe blocks, you can launch the interactive session cleanly in a new tab!
-                  </p>
-                </div>
+            meetingUrl?.includes("meet.google.com") || meetingUrl?.includes("google.com") ? (
+              <div className="flex-1 p-6 flex flex-col items-center justify-center text-center gap-6 overflow-y-auto min-h-0 bg-slate-950 rounded-2xl border border-slate-900">
                 
-                <a 
-                  href={getAppMeetingRoomUrl()}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl cursor-pointer flex items-center gap-1 transition shrink-0"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> Join in New Tab
-                </a>
-              </div>
+                {/* GOOGLE MEET ICON & pulsing ring */}
+                <div className="relative">
+                  <div className="absolute inset-0 bg-emerald-500/10 rounded-3xl blur-2xl animate-pulse"></div>
+                  <div className="relative w-20 h-20 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-2xl">
+                    <Video className="w-10 h-10 text-emerald-400" />
+                  </div>
+                </div>
 
-              {/* REAL JITSI MEET IFRAME */}
-              <div className="flex-1 min-h-[400px] bg-slate-900 border border-slate-850 rounded-2xl overflow-hidden relative shadow-lg flex items-center justify-center">
-                <iframe
-                  allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                  src={getJitsiUrl(meetingUrl || `https://meet.senf.im/cohort-room-default`, studentName)}
-                  style={{ width: '100%', height: '100%', border: '0px' }}
-                ></iframe>
-              </div>
-
-              {/* ACTION INFO BANNER CARD */}
-              <div className="p-4 bg-indigo-950/50 border border-indigo-900/60 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
-                <div className="space-y-1">
-                  <h4 className="font-black text-xs text-indigo-300 uppercase tracking-widest flex items-center gap-1 font-mono">
-                    <Sparkles className="w-3.5 h-3.5" /> Interactive Features Unlocked
-                  </h4>
-                  <p className="text-[11px] text-slate-300 leading-normal">
-                    This in-app arena allows you to collaborate during meetings! Toggle to the **Interactive Board** to draw, or access the **Sandbox Frame** to use direct tools side-by-side.
+                <div className="space-y-2 max-w-lg">
+                  <div className="flex justify-center">
+                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-black rounded-full uppercase tracking-wider font-mono border border-emerald-500/20 flex items-center gap-1.5 shadow">
+                      <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></span>
+                      Google Meet Live Hub
+                    </span>
+                  </div>
+                  <h4 className="text-xl font-black text-white">{meetingTitle || "Live Interactive Session"}</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed font-semibold">
+                    Welcome! This class live stream is hosted securely via <strong className="text-white">Google Meet</strong>. Since security filters prevent running Google Meet inside an embedded frame, please launch the live video conference room in a secured external tab below!
                   </p>
                 </div>
-                <button 
-                  onClick={() => setActivePanel("whiteboard")}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shrink-0 cursor-pointer shadow-md transition"
-                >
-                  Launch Whiteboard
-                </button>
-              </div>
 
-            </div>
+                {/* ACTION: LAUNCH MEET BUTTON & COPY OPTION */}
+                <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block font-mono">Secure Google Meet Room URL</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        readOnly 
+                        value={meetingUrl || "https://meet.google.com/cohort-room-default"}
+                        className="flex-1 px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-xs text-slate-300 font-mono select-all focus:outline-none focus:ring-1 focus:ring-emerald-500/40 font-bold"
+                      />
+                      <button
+                        onClick={handleCopyLink}
+                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                      >
+                        {linkCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <a 
+                    href={meetingUrl || "https://meet.google.com/cohort-room-default"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-950/50 transition-all transform hover:scale-[1.01]"
+                  >
+                    <ExternalLink className="w-4 h-4 shrink-0" /> Launch Google Meet Session (New Tab)
+                  </a>
+                </div>
+
+                {/* INSTRUCTION CARD FOR INTERACTIVE FEATURES */}
+                <div className="p-4 bg-indigo-950/40 border border-indigo-900/40 rounded-2xl max-w-md text-left flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5 animate-pulse" />
+                  <div className="space-y-1">
+                    <h5 className="font-black text-[10px] text-indigo-300 uppercase tracking-widest font-mono">Keep This Platform Tab Open!</h5>
+                    <p className="text-[11px] text-slate-300 leading-normal">
+                      You can easily place Google Meet side-by-side with this browser window to actively participate in the **Interactive Sketchboard**, **Live Chat**, **Collaborative Notes**, and **Classroom Polls** pushed by the trainer!
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            ) : (
+              <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto min-h-0">
+                
+                {/* IFRAME HELPER BANNER CARD */}
+                <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-xs">
+                      <Shield className="w-4 h-4 text-indigo-400 animate-pulse" />
+                      <span>In-App Live Streaming Arena</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-normal max-w-xl">
+                      Our live stream is hosted on a secure, open meeting server (meet.jit.si) with no login required. If you experience browser iframe blocks, you can launch the interactive session cleanly in a new tab!
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleCopyLink}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold rounded-xl cursor-pointer flex items-center gap-1 transition shrink-0"
+                    >
+                      {linkCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : "Copy Link"}
+                    </button>
+                    <a 
+                      href={meetingUrl || "https://meet.jit.si/csdg-digital-growth-cohort"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-black rounded-xl cursor-pointer flex items-center gap-1 transition shrink-0 shadow-md"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Join in New Tab
+                    </a>
+                  </div>
+                </div>
+
+                {/* REAL JITSI MEET EMBED VIA SDK */}
+                <div className="flex-1 min-h-[450px] bg-slate-950 border border-slate-850 rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center">
+                  <JitsiEmbed
+                    roomUrl={meetingUrl || "https://meet.jit.si/csdg-digital-growth-cohort"}
+                    displayName={studentName}
+                  />
+                </div>
+
+                {/* ACTION INFO BANNER CARD */}
+                <div className="p-4 bg-indigo-950/40 border border-indigo-900/60 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
+                  <div className="space-y-1">
+                    <h4 className="font-black text-xs text-indigo-300 uppercase tracking-widest flex items-center gap-1 font-mono">
+                      <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Interactive Features Active
+                    </h4>
+                    <p className="text-[11px] text-slate-300 leading-normal">
+                      This in-app arena allows you to collaborate during meetings! Toggle to the **Interactive Board** at the top bar to sketch diagrams and review student submissions in real-time.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => setActivePanel("whiteboard")}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shrink-0 cursor-pointer shadow-md transition"
+                  >
+                    Open Sketchboard
+                  </button>
+                </div>
+
+              </div>
+            )
           )}
 
           {/* VIEWPORT 2: HTML5 INTERACTIVE WHITEBOARD */}
@@ -1037,51 +1108,7 @@ export default function InAppMeetingRoom({
             </div>
           )}
 
-          {/* VIEWPORT 3: THE EMBEDDED IFRAME SANDBOX */}
-          {activePanel === "iframe" && (
-            <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden min-h-0">
-              
-              {/* Iframe Warning / Alert banner */}
-              <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-amber-400 font-extrabold text-xs">
-                    <Shield className="w-4 h-4 text-amber-400" />
-                    <span>External Content Isolation Framework</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 leading-normal max-w-xl">
-                    Commercial conferencing tools like Google Meet or Zoom enforce security rules (<strong className="text-slate-300">X-Frame-Options</strong>) preventing live viewport embeds. If the embedded sandbox below is blocked by your browser, launch it cleanly in a secured native viewport tab.
-                  </p>
-                </div>
-                
-                <a 
-                  href={meetingUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl cursor-pointer flex items-center gap-1.5 shadow shrink-0 transition"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> Launch External Tab
-                </a>
-              </div>
 
-              {/* Actual physical Iframe wrapper */}
-              <div className="flex-1 bg-slate-950 rounded-2xl relative border border-slate-800 overflow-hidden shadow-inner flex flex-col">
-                <iframe
-                  title="In-App Secured Frame"
-                  src={getJitsiUrl(meetingUrl, studentName)}
-                  allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                  sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-downloads"
-                  className="w-full flex-1 bg-slate-900 border-none"
-                  onError={() => console.warn("Iframe blocked by security constraints")}
-                />
-                
-                <div className="p-3 bg-slate-900 border-t border-slate-850 flex justify-between items-center text-[10px] font-mono text-slate-400">
-                  <span className="truncate">Resource: {meetingUrl}</span>
-                  <span className="text-indigo-400">Secured SSL Session</span>
-                </div>
-              </div>
-
-            </div>
-          )}
 
           {/* BOTTOM MEDIA CONFLICTS / MEDIA CONTROLS FLOATING BAR */}
           <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-wrap justify-between items-center gap-3 z-10">

@@ -39,6 +39,7 @@ export interface LiveMeeting {
   id: string;
   title: string;
   url: string;
+  provider?: "google" | "jitsi";
   targetType: "batch" | "student";
   targetStudentEmail?: string;
   createdAt: string;

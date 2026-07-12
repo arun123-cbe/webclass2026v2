@@ -1,25 +1,17 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Video, 
   Send, 
-  Users, 
   Layers, 
   Trash2, 
-  Radio, 
-  Plus, 
   Sparkles, 
   Check, 
-  Monitor, 
-  Tv,
   ExternalLink,
-  Laptop,
   CheckCircle,
-  Clock,
   HelpCircle
 } from "lucide-react";
 import { Student, CourseModule, LiveMeeting } from "../types";
 import { db } from "../lib/firebase";
-import { getJitsiUrl } from "../lib/jitsi";
 import { 
   collection, 
   doc, 
@@ -28,11 +20,35 @@ import {
   getDocs, 
   onSnapshot, 
   deleteDoc, 
-  updateDoc, 
+  updateDoc,
   query, 
-  orderBy,
-  where 
+  orderBy 
 } from "firebase/firestore";
+
+const DEFAULT_GOOGLE_MEET = "https://meet.google.com/eew-wapz-krt";
+const DEFAULT_JITSI = "https://meet.jit.si/csdg-digital-growth-cohort";
+
+// Smart URL formatting helper
+const formatMeetingUrl = (url: string, provider: "google" | "jitsi"): string => {
+  const cleanVal = url.trim();
+  const meetIdRegex = /^[a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3}$/;
+  const meetIdNoHyphensRegex = /^[a-zA-Z]{10}$/;
+
+  if (provider === "google") {
+    if (meetIdRegex.test(cleanVal)) {
+      return `https://meet.google.com/${cleanVal.toLowerCase()}`;
+    } else if (meetIdNoHyphensRegex.test(cleanVal)) {
+      const formatted = `${cleanVal.substring(0, 3)}-${cleanVal.substring(3, 7)}-${cleanVal.substring(7)}`;
+      return `https://meet.google.com/${formatted.toLowerCase()}`;
+    }
+  } else {
+    const pureRoomRegex = /^[a-zA-Z0-9_-]+$/;
+    if (pureRoomRegex.test(cleanVal) && !cleanVal.includes(".") && !cleanVal.startsWith("http")) {
+      return `https://meet.jit.si/${cleanVal}`;
+    }
+  }
+  return cleanVal;
+};
 
 interface LiveBroadcastStudioProps {
   courseModules: CourseModule[];
@@ -46,76 +62,17 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
 
   // Meeting Form states
   const [meetingTitle, setMeetingTitle] = useState("");
-  const [meetingUrl, setMeetingUrl] = useState("");
+  const [meetingUrl, setMeetingUrl] = useState(DEFAULT_GOOGLE_MEET);
+  const [meetingProvider, setMeetingProvider] = useState<"google" | "jitsi">("google");
   const [targetType, setTargetType] = useState<"batch" | "student">("batch");
   const [targetStudent, setTargetStudent] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
   const [dispatchedSuccess, setDispatchedSuccess] = useState(false);
 
-  // Webinar Broadcast states
-  const [isWebinarLive, setIsWebinarLive] = useState(false);
-  const [webinarTopic, setWebinarTopic] = useState("Interactive Live Deep-Dive Class");
-  const [webinarUrl, setWebinarUrl] = useState("");
+  // Casting & Poll states
   const [castedLessonId, setCastedLessonId] = useState("");
-  const [screenSharingActive, setScreenSharingActive] = useState(false);
   const [broadcastingStatus, setBroadcastingStatus] = useState("");
-
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
-
-  // Student Admission Lobby states & hooks
-  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (!isWebinarLive || !webinarUrl) {
-      setPendingRequests([]);
-      return;
-    }
-
-    const q = query(
-      collection(db, "live_class_join_requests"),
-      where("meetingUrl", "==", webinarUrl),
-      where("status", "==", "pending")
-    );
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const requests: any[] = [];
-      snapshot.forEach((docSnap) => {
-        requests.push({ id: docSnap.id, ...docSnap.data() });
-      });
-      requests.sort((a, b) => new Date(a.requestedAt || 0).getTime() - new Date(b.requestedAt || 0).getTime());
-      setPendingRequests(requests);
-    }, (err) => {
-      console.error("Error listening to student join requests:", err);
-    });
-
-    return () => {
-      unsub();
-    };
-  }, [webinarUrl, isWebinarLive]);
-
-  const handleApproveRequest = async (reqId: string) => {
-    try {
-      await setDoc(doc(db, "live_class_join_requests", reqId), {
-        status: "approved"
-      }, { merge: true });
-    } catch (err) {
-      console.error("Error approving request:", err);
-    }
-  };
-
-  const handleRejectRequest = async (reqId: string) => {
-    try {
-      await setDoc(doc(db, "live_class_join_requests", reqId), {
-        status: "rejected"
-      }, { merge: true });
-    } catch (err) {
-      console.error("Error rejecting request:", err);
-    }
-  };
-
-  // Poll & Question states
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", "", "", ""]);
   const [pollCorrectAnswer, setPollCorrectAnswer] = useState<number>(0);
@@ -198,7 +155,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     }
   };
 
-  // Fetch all dispatched meetings
+  // Fetch all dispatched meetings and live class state
   useEffect(() => {
     const q = query(collection(db, "meetings"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -214,11 +171,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const liveUnsubscribe = onSnapshot(doc(db, "config", "live_class"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setIsWebinarLive(data.active || false);
-        setWebinarTopic(data.topic || "Interactive Live Deep-Dive Class");
-        setWebinarUrl(data.meetingUrl || "");
         setCastedLessonId(data.castedLessonId || "");
-        setScreenSharingActive(data.screenSharingActive || false);
         setActiveQuestion(data.activeQuestion || null);
       }
     });
@@ -226,16 +179,11 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     return () => {
       unsubscribe();
       liveUnsubscribe();
-      stopScreenShare();
     };
   }, []);
 
   // Listen to student responses in real-time
   useEffect(() => {
-    if (!isWebinarLive) {
-      setLiveResponses([]);
-      return;
-    }
     const q = query(collection(db, "live_class_responses"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: any[] = [];
@@ -245,23 +193,20 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
       setLiveResponses(list);
     });
     return () => unsubscribe();
-  }, [isWebinarLive]);
+  }, []);
 
-  // Generate realistic Jitsi Meet URL
+  // Generate realistic meet link
   const handleGenerateMeetLink = () => {
     const chars = "abcdefghijklmnopqrstuvwxyz";
-    const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setMeetingUrl(`https://meet.senf.im/${segment1}-${segment2}-${segment3}`);
-  };
-
-  const handleGenerateWebinarMeetLink = () => {
-    const chars = "abcdefghijklmnopqrstuvwxyz";
-    const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setWebinarUrl(`https://meet.senf.im/${segment1}-${segment2}-${segment3}`);
+    if (meetingProvider === "google") {
+      const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      setMeetingUrl(`https://meet.google.com/${segment1}-${segment2}-${segment3}`);
+    } else {
+      const segment = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      setMeetingUrl(`https://meet.jit.si/csdg-cohort-room-${segment}`);
+    }
   };
 
   // Dispatch interactive meeting
@@ -270,9 +215,11 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     if (!meetingTitle.trim() || !meetingUrl.trim()) return;
 
     try {
+      const formattedUrl = formatMeetingUrl(meetingUrl, meetingProvider);
       const newMeeting = {
         title: meetingTitle.trim(),
-        url: meetingUrl.trim(),
+        url: formattedUrl,
+        provider: meetingProvider,
         targetType,
         targetStudentEmail: targetType === "student" ? targetStudent : "",
         createdAt: new Date().toISOString(),
@@ -284,7 +231,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
       await addDoc(collection(db, "meetings"), newMeeting);
       
       setMeetingTitle("");
-      setMeetingUrl("");
+      setMeetingUrl(meetingProvider === "google" ? DEFAULT_GOOGLE_MEET : DEFAULT_JITSI);
       setMeetingDate("");
       setMeetingTime("");
       setDispatchedSuccess(true);
@@ -314,158 +261,28 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     }
   };
 
-  // Start Broadcast Webinar Session (Persisted to Firestore for real-time casting)
-  const handleStartWebinar = async () => {
-    if (!webinarTopic.trim()) return;
-
-    try {
-      const liveData = {
-        active: true,
-        topic: webinarTopic.trim(),
-        meetingUrl: webinarUrl.trim() || `https://meet.senf.im/cohort-broadcast-room-${Date.now()}`,
-        castedLessonId: castedLessonId || "none",
-        screenSharingActive: screenSharingActive,
-        startedAt: new Date().toISOString(),
-        trainerName: "Instructor Mike"
-      };
-
-      await setDoc(doc(db, "config", "live_class"), liveData);
-      setIsWebinarLive(true);
-      setBroadcastingStatus("Webinar is now actively broadcasting to students in real-time.");
-    } catch (err) {
-      console.error("Error launching live session: ", err);
-    }
-  };
-
-  // Stop Broadcast Webinar
-  const handleStopWebinar = async () => {
-    try {
-      await setDoc(doc(db, "config", "live_class"), {
-        active: false,
-        topic: "",
-        meetingUrl: "",
-        castedLessonId: "",
-        screenSharingActive: false,
-        startedAt: ""
-      });
-      setIsWebinarLive(false);
-      setBroadcastingStatus("Webinar terminated. Classroom sync reverted to standard self-study mode.");
-      stopScreenShare();
-    } catch (err) {
-      console.error("Error stopping session: ", err);
-    }
-  };
-
   // Update Casted Lesson selection in real-time
   const handleUpdateCastedLesson = async (lessonId: string) => {
     setCastedLessonId(lessonId);
-    if (isWebinarLive) {
-      try {
-        await updateDoc(doc(db, "config", "live_class"), {
-          castedLessonId: lessonId
-        });
+    try {
+      await setDoc(doc(db, "config", "live_class"), {
+        castedLessonId: lessonId
+      }, { merge: true });
+      if (lessonId) {
         setBroadcastingStatus(`Casting Lesson "${lessonId}" active. Attending students' view has been synchronized.`);
-      } catch (err) {
-        console.error("Error casting lesson: ", err);
+      } else {
+        setBroadcastingStatus("Casting cleared.");
       }
-    }
-  };
-
-  // Handle screen sharing stream natively
-  const handleToggleScreenShare = async () => {
-    if (screenSharingActive) {
-      stopScreenShare();
-      return;
-    }
-
-    try {
-      // standard browser screen capture
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false
-      });
-      
-      screenStreamRef.current = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-
-      setScreenSharingActive(true);
-      
-      if (isWebinarLive) {
-        await updateDoc(doc(db, "config", "live_class"), {
-          screenSharingActive: true
-        });
-      }
-
-      // Handle stream end by browser stop button
-      stream.getVideoTracks()[0].onended = () => {
-        stopScreenShare();
-      };
     } catch (err) {
-      console.warn("Screen share declined or restricted by browser: ", err);
+      console.error("Error casting lesson: ", err);
     }
   };
-
-  const handleToggleCameraShare = async () => {
-    if (screenSharingActive) {
-      stopScreenShare();
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-      });
-      
-      screenStreamRef.current = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-
-      setScreenSharingActive(true);
-      
-      if (isWebinarLive) {
-        await updateDoc(doc(db, "config", "live_class"), {
-          screenSharingActive: true
-        });
-      }
-
-      stream.getVideoTracks()[0].onended = () => {
-        stopScreenShare();
-      };
-    } catch (err) {
-      console.warn("Camera/Mic declined or restricted by browser: ", err);
-      alert("Could not access camera/microphone. Please ensure you have granted permissions.");
-    }
-  };
-
-  const stopScreenShare = async () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-    }
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-    setScreenSharingActive(false);
-    if (isWebinarLive) {
-      try {
-        await updateDoc(doc(db, "config", "live_class"), {
-          screenSharingActive: false
-        });
-      } catch (e) {}
-    }
-  };
-
-  const allLessons = courseModules.flatMap(m => m.lessons);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start text-left">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start text-left" id="live-studio-grid">
       
       {/* LEFT COLUMN: DISPATCH & MANAGE MEETING LINKS */}
-      <div className="lg:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6" id="meeting-dispatcher-card">
         <div>
           <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[9px] font-black rounded uppercase tracking-wider font-mono">
             📍 Meeting Creation Hub
@@ -495,8 +312,87 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
           </div>
         )}
 
+        {/* CAST LIVE STUDY MATERIAL (REAL-TIME SYNC) */}
+        <div className="p-4 bg-indigo-50/50 border border-indigo-100/80 rounded-2xl space-y-2.5 text-left">
+          <label className="text-[10px] font-black text-indigo-700 uppercase block flex items-center gap-1">
+            <Layers className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+            Cast Live Study Material (Real-time Sync)
+          </label>
+          <select
+            value={castedLessonId}
+            onChange={(e) => handleUpdateCastedLesson(e.target.value)}
+            className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-bold cursor-pointer focus:outline-none"
+          >
+            <option value="">❌ No Study Material Casted (Idle)</option>
+            {courseModules.map((mod) => (
+              <optgroup key={mod.id} label={mod.title}>
+                {mod.lessons.map(les => (
+                  <option key={les.id} value={les.id}>{les.title}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p className="text-[9px] text-slate-500 leading-tight">
+            Casting a lesson instantly updates all attending students' Classroom dashboard to display this lesson's slides and guidelines in real-time.
+          </p>
+        </div>
+
+        {broadcastingStatus && (
+          <div className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 p-2.5 rounded-xl font-mono">
+            ℹ️ Status: {broadcastingStatus}
+          </div>
+        )}
+
         {/* Meeting Form */}
         <form onSubmit={handleDispatchMeeting} className="space-y-4">
+          {/* MEETING PROVIDER SELECTOR */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] font-black text-slate-500 uppercase block">Meeting Platform / Provider</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setMeetingUrl(meetingProvider === "google" ? DEFAULT_GOOGLE_MEET : DEFAULT_JITSI);
+                }}
+                className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-100 px-2 py-0.5 rounded shadow-sm"
+              >
+                Reset to Default School Room
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMeetingProvider("google");
+                  setMeetingUrl(DEFAULT_GOOGLE_MEET);
+                }}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  meetingProvider === "google"
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm font-extrabold"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${meetingProvider === "google" ? "bg-emerald-500 animate-ping" : "bg-slate-400"}`}></span>
+                Google Meet Portal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMeetingProvider("jitsi");
+                  setMeetingUrl(DEFAULT_JITSI);
+                }}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  meetingProvider === "jitsi"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-800 shadow-sm font-extrabold"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${meetingProvider === "jitsi" ? "bg-indigo-500 animate-pulse" : "bg-slate-400"}`}></span>
+                Jitsi (Embedded Frame)
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-500 uppercase block">Meeting Topic / Class Title</label>
             <input 
@@ -518,17 +414,21 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
                 className="text-[9px] font-black text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100"
               >
                 <Sparkles className="w-3 h-3 text-indigo-500" />
-                Generate Google Meet URL
+                Generate Dynamic URL
               </button>
             </div>
             <input 
-              type="url" 
-              placeholder="e.g. https://meet.senf.im/my-meeting-room"
+              type="text" 
+              placeholder={meetingProvider === "google" ? "Enter Google Meet Link or 10-char ID (e.g. eew-wapz-krt)" : "Enter Jitsi Link or Room Name"}
               value={meetingUrl}
               onChange={(e) => setMeetingUrl(e.target.value)}
+              onBlur={() => setMeetingUrl(formatMeetingUrl(meetingUrl, meetingProvider))}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none focus:ring-4 focus:ring-indigo-50 font-mono"
               required
             />
+            <p className="text-[9px] text-slate-400 mt-0.5 leading-normal">
+              💡 Pre-filled with standard school permanent room. Click <strong>Generate Dynamic URL</strong> above for a unique, randomized link. You can also paste just the Google Meet ID (e.g., <code>eew-wapz-krt</code>) and it will resolve automatically!
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -609,8 +509,14 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
                         meet.targetType === "batch" ? "bg-indigo-100 text-indigo-700" : "bg-amber-100 text-amber-800"
-                      }`}>
+                       }`}>
                         {meet.targetType === "batch" ? "Batch wide" : "Private Link"}
+                      </span>
+                      {/* PLATFORM BADGE */}
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                        meet.provider === "jitsi" || meet.url.includes("meet.ffmuc.net") || meet.url.includes("meet.jit.si") ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                      }`}>
+                        {meet.provider === "jitsi" || meet.url.includes("meet.ffmuc.net") || meet.url.includes("meet.jit.si") ? "Jitsi" : "Google Meet"}
                       </span>
                       {meet.targetStudentEmail && (
                         <span className="text-[9px] text-slate-400 truncate max-w-[120px] font-mono" title={meet.targetStudentEmail}>
@@ -661,548 +567,225 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
             </div>
           )}
         </div>
-
-        {/* Real-time Classroom Poll & Instant Question Section */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-left">
-          <div className="flex justify-between items-center">
-            <div className="space-y-0.5">
-              <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[9px] font-black rounded uppercase tracking-wider font-mono">
-                ⚡ LIVE ENGAGEMENT
-              </span>
-              <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5 mt-0.5">
-                <HelpCircle className="w-4 h-4 text-rose-500" />
-                Instant Lecture Poll & Live Question
-              </h4>
-            </div>
-            {activeQuestion && (
-              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-black rounded uppercase tracking-wider font-mono animate-pulse">
-                Active Question Live
-              </span>
-            )}
-          </div>
-          
-          <p className="text-xs text-slate-500">
-            Keep students engaged by pushing an instant question or poll to their active live class screens. Monitor their responses in real-time as they submit answers!
-          </p>
-
-          {/* Form to create/choose a question if no question is active */}
-          {!activeQuestion ? (
-            <div className="space-y-4">
-              {/* Pre-configured Quick Templates */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-500 uppercase block">Quick Question Templates</label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleLoadTemplate(0)}
-                    className="px-2.5 py-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer text-slate-700"
-                  >
-                    📈 Marketing ROI KPI
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadTemplate(1)}
-                    className="px-2.5 py-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer text-slate-700"
-                  >
-                    🔍 SEO Meta Optimization
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadTemplate(2)}
-                    className="px-2.5 py-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer text-slate-700"
-                  >
-                    🧠 LLM Hyperparameters
-                  </button>
-                </div>
-              </div>
-
-              {/* Custom Input Fields */}
-              <div className="space-y-3 pt-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-500 uppercase block">Question Text</label>
-                  <input
-                    type="text"
-                    value={pollQuestion}
-                    onChange={(e) => setPollQuestion(e.target.value)}
-                    placeholder="Type the question you want to ask..."
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {pollOptions.map((opt, oIdx) => (
-                    <div key={oIdx} className="space-y-1">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-black text-slate-500 uppercase block">Option {String.fromCharCode(65 + oIdx)}</label>
-                        <label className="flex items-center gap-1 text-[10px] text-slate-500 font-bold cursor-pointer">
-                          <input
-                            type="radio"
-                            name="correctAnswerIndex"
-                            checked={pollCorrectAnswer === oIdx}
-                            onChange={() => setPollCorrectAnswer(oIdx)}
-                            className="w-3 h-3 text-indigo-600 cursor-pointer"
-                          />
-                          <span>Correct</span>
-                        </label>
-                      </div>
-                      <input
-                        type="text"
-                        value={opt}
-                        onChange={(e) => handleUpdateOption(oIdx, e.target.value)}
-                        placeholder={`Option ${String.fromCharCode(65 + oIdx)}`}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none"
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  disabled={!pollQuestion.trim() || pollOptions.some(opt => !opt.trim())}
-                  onClick={handleInitiateQuestion}
-                  className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <Send className="w-4 h-4" />
-                  Initiate & Broadcast Live Question
-                </button>
-                {!isWebinarLive && (
-                  <p className="text-[10px] text-indigo-600 font-bold text-center font-mono">💡 Tip: You can launch instant polls anytime during dispatched meetings or webinars!</p>
-                )}
-              </div>
-            </div>
-          ) : (
-            // Active Question Display & Live Results for Trainer
-            <div className="p-4 bg-white border border-slate-200 rounded-2xl space-y-4">
-              <div className="border-b border-slate-100 pb-3 flex justify-between items-start gap-4">
-                <div className="space-y-1">
-                  <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded uppercase font-mono tracking-wider">
-                    📢 BROADCASTING INSTANT QUESTION
-                  </span>
-                  <h5 className="font-extrabold text-sm text-slate-900 leading-snug">{activeQuestion.questionText}</h5>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleClearQuestion}
-                  className="px-3 py-1 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-lg text-xs transition shrink-0 cursor-pointer border border-slate-200"
-                >
-                  End & Clear
-                </button>
-              </div>
-
-              {/* Live Statistics & Progress Bars */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  <span>📊 Real-time Poll Breakdown</span>
-                  <span className="text-rose-600 font-mono animate-pulse flex items-center gap-1">
-                    <span className="w-2 h-2 bg-rose-600 rounded-full animate-ping"></span>
-                    Live ({liveResponses.filter(r => r.questionId === activeQuestion.id).length} responses)
-                  </span>
-                </div>
-
-                <div className="space-y-2.5">
-                  {activeQuestion.options.map((opt: string, oIdx: number) => {
-                    const votes = liveResponses.filter(r => r.questionId === activeQuestion.id && r.selectedOptionIndex === oIdx);
-                    const totalVotes = liveResponses.filter(r => r.questionId === activeQuestion.id).length;
-                    const percent = totalVotes > 0 
-                      ? Math.round((votes.length / totalVotes) * 100) 
-                      : 0;
-                    const isCorrect = oIdx === activeQuestion.correctAnswer;
-
-                    return (
-                      <div key={oIdx} className="space-y-1">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                            <span className="font-black text-slate-400">{String.fromCharCode(65 + oIdx)}.</span>
-                            {opt}
-                            {isCorrect && (
-                              <span className="text-[9px] font-black bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-mono flex items-center gap-0.5">
-                                <Check className="w-3 h-3 text-emerald-600" /> Answer
-                              </span>
-                            )}
-                          </span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {percent}% ({votes.length})
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isCorrect ? "bg-emerald-500" : "bg-indigo-500"
-                            }`}
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* List of active student submissions */}
-              <div className="pt-3 border-t border-slate-100">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">
-                  👤 Submissions Feed
-                </span>
-                
-                {liveResponses.filter(r => r.questionId === activeQuestion.id).length === 0 ? (
-                  <p className="text-[11px] text-slate-400 italic">Waiting for attending students to vote...</p>
-                ) : (
-                  <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
-                    {liveResponses.filter(r => r.questionId === activeQuestion.id).map((res: any) => (
-                      <div key={res.id} className="flex justify-between items-center text-[11px] py-1 border-b border-slate-50">
-                        <span className="font-bold text-slate-800">
-                          {res.studentName || "Anonymous Student"} 
-                          <span className="text-[9px] text-slate-400 font-mono font-normal ml-1">({res.studentEmail})</span>
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-500">
-                            Chose {String.fromCharCode(65 + res.selectedOptionIndex)}
-                          </span>
-                          {res.isCorrect ? (
-                            <span className="bg-emerald-50 text-emerald-700 text-[8px] font-black px-1.5 rounded uppercase font-mono">
-                              Correct
-                            </span>
-                          ) : (
-                            <span className="bg-rose-50 text-rose-700 text-[8px] font-black px-1.5 rounded uppercase font-mono">
-                              Incorrect
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* RIGHT COLUMN: WEBINAR SCREEN SHARE & STUDY MATERIALS PRESENTER */}
-      <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+      {/* RIGHT COLUMN: REAL-TIME ENGAGEMENT & POLLS */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6" id="live-engagement-card">
         <div>
-          <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <Tv className="w-5 h-5 text-rose-500" />
-            Live Webinar & Screen Casting Studio
+          <span className="px-2 py-0.5 bg-rose-50 text-rose-700 text-[9px] font-black rounded uppercase tracking-wider font-mono">
+            ⚡ Live Engagement Hub
+          </span>
+          <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2 mt-1">
+            <HelpCircle className="w-5 h-5 text-rose-500" />
+            Lecture Polls & Instant Questions
           </h3>
-          <p className="text-xs text-slate-500 mt-1">Simulate or run full interactive webinars! Share your real screen/presentation slides, cast theoretical study notes, and synchronize all attending students' screens in real-time.</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Keep students engaged by pushing an instant question or poll to their active live class screens. Monitor their responses in real-time as they submit answers!
+          </p>
         </div>
 
-        {/* Broadcasting details banner */}
-        {isWebinarLive ? (
+        {activeQuestion && (
+          <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-150 rounded-xl text-xs font-bold flex items-center justify-between animate-pulse">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+              Active Question Live on Student Dashboards
+            </span>
+            <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase font-mono tracking-wider">
+              Voting Open
+            </span>
+          </div>
+        )}
+
+        {/* Form to create/choose a question if no question is active */}
+        {!activeQuestion ? (
           <div className="space-y-4">
-            <div className="p-4 bg-rose-50 border border-rose-100 text-rose-900 rounded-2xl flex items-center gap-3">
-              <Radio className="w-6 h-6 text-rose-500 animate-ping shrink-0" />
-              <div>
-                <span className="bg-rose-500 text-white font-mono font-black text-[9px] px-2 py-0.5 rounded">🔴 BROADCASTING LIVE</span>
-                <h4 className="font-extrabold text-sm mt-1">Topic: {webinarTopic}</h4>
-                <p className="text-[11px] text-rose-700 font-mono mt-0.5">Active Meeting URL: <a href={webinarUrl} target="_blank" rel="noreferrer" className="underline font-bold inline-flex items-center gap-0.5">{webinarUrl} <ExternalLink className="w-2.5 h-2.5" /></a></p>
+            {/* Pre-configured Quick Templates */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase block">Quick Question Templates</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleLoadTemplate(0)}
+                  className="px-2.5 py-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer text-slate-700"
+                >
+                  📈 Marketing ROI KPI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLoadTemplate(1)}
+                  className="px-2.5 py-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer text-slate-700"
+                >
+                  🔍 SEO Meta Optimization
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLoadTemplate(2)}
+                  className="px-2.5 py-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 rounded-lg text-xs font-semibold cursor-pointer text-slate-700"
+                >
+                  🧠 LLM Hyperparameters
+                </button>
               </div>
             </div>
 
-            {/* MODERATION & ACCEPTING STUDENTS ASSISTANT CARD */}
-            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-950 space-y-3.5 text-left">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-xs">
-                    🛡️
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs uppercase tracking-widest text-indigo-800">Moderator Control Center</h4>
-                    <p className="text-[10px] text-indigo-600 font-medium">Classroom hosted on secure open-source server (meet.senf.im)</p>
-                  </div>
-                </div>
-
-                <a
-                  href={webinarUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow transition self-start sm:self-auto"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> Launch Host Workspace (New Tab)
-                </a>
+            {/* Custom Input Fields */}
+            <div className="space-y-3 pt-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase block">Question Text</label>
+                <input
+                  type="text"
+                  value={pollQuestion}
+                  onChange={(e) => setPollQuestion(e.target.value)}
+                  placeholder="Type the question you want to ask..."
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 font-bold"
+                />
               </div>
-              
-              <div className="text-[11px] text-slate-700 space-y-2.5 leading-relaxed">
-                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl space-y-1">
-                  <span className="font-bold text-[10px] text-emerald-800 block uppercase tracking-wider">✅ Seamless Access Enabled</span>
-                  <p className="text-slate-600 text-[10px] leading-normal">
-                    We've routed your classroom through the free, open-source <strong>meet.senf.im</strong> server. This completely bypasses Jitsi's 8x8 login requirements! You and your students can connect instantly inside the frame without needing accounts.
-                  </p>
-                </div>
 
-                <div className="p-3 bg-white border border-indigo-100 rounded-xl space-y-1">
-                  <span className="font-bold text-[10px] text-indigo-700 block uppercase tracking-wider">👉 How to Approve / Accept Students (Optional):</span>
-                  <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[10px]">
-                    <li>Click the <strong>Launch Host Workspace (New Tab)</strong> button above to open the main meeting workspace.</li>
-                    <li>Click the <strong>Security Shield</strong> icon on the bottom right of the meeting.</li>
-                    <li>Toggle on <strong>Enable Lobby Mode</strong>. Entering students will now need your approval to join.</li>
-                  </ol>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {pollOptions.map((opt, oIdx) => (
+                  <div key={oIdx} className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-black text-slate-500 uppercase block">Option {String.fromCharCode(65 + oIdx)}</label>
+                      <label className="flex items-center gap-1 text-[10px] text-slate-500 font-bold cursor-pointer">
+                        <input
+                          type="radio"
+                          name="correctAnswerIndex"
+                          checked={pollCorrectAnswer === oIdx}
+                          onChange={() => setPollCorrectAnswer(oIdx)}
+                          className="w-3 h-3 text-indigo-600 cursor-pointer"
+                        />
+                        <span>Correct</span>
+                      </label>
+                    </div>
+                    <input
+                      type="text"
+                      value={opt}
+                      onChange={(e) => handleUpdateOption(oIdx, e.target.value)}
+                      placeholder={`Option ${String.fromCharCode(65 + oIdx)}`}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none"
+                    />
+                  </div>
+                ))}
               </div>
+
+              <button
+                type="button"
+                disabled={!pollQuestion.trim() || pollOptions.some(opt => !opt.trim())}
+                onClick={handleInitiateQuestion}
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Send className="w-4 h-4" />
+                Initiate & Broadcast Live Question
+              </button>
+              <p className="text-[10px] text-indigo-600 font-bold text-center font-mono">
+                💡 Tip: You can launch instant polls anytime during dispatched meetings or classes!
+              </p>
             </div>
           </div>
         ) : (
-          <div className="p-4 bg-slate-50 border border-slate-200 text-slate-500 rounded-2xl flex items-center gap-3">
-            <Tv className="w-6 h-6 text-slate-400 shrink-0" />
-            <div>
-              <span className="bg-slate-500 text-white font-mono font-black text-[9px] px-2 py-0.5 rounded">OFFLINE</span>
-              <h4 className="font-bold text-sm mt-1">Broadcast Studio is currently Idle</h4>
-              <p className="text-[10px] text-slate-400 mt-0.5">Students are currently study at their own sequential pace.</p>
-            </div>
-          </div>
-        )}
-
-        {broadcastingStatus && (
-          <div className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 p-2.5 rounded-xl font-mono">
-            ℹ️ Status: {broadcastingStatus}
-          </div>
-        )}
-
-        {/* Cast Configuration Form */}
-        <div className="space-y-4 p-5 bg-slate-50/50 rounded-2xl border border-slate-200">
-          <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest block">Webinar Settings</h4>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-500 uppercase block">Active Webinar Topic</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Masterclass: Conversion Metrics Breakdown"
-                value={webinarTopic}
-                onChange={(e) => setWebinarTopic(e.target.value)}
-                disabled={isWebinarLive}
-                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none disabled:opacity-75 font-semibold"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <label className="text-[10px] font-black text-slate-500 uppercase block">Webinar Class URL</label>
-                {!isWebinarLive && (
-                  <button 
-                    type="button"
-                    onClick={handleGenerateWebinarMeetLink}
-                    className="text-[9px] font-black text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 cursor-pointer"
-                  >
-                    Generate Meet Link
-                  </button>
-                )}
+          // Active Question Display & Live Results for Trainer
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+            <div className="border-b border-slate-200 pb-3 flex justify-between items-start gap-4">
+              <div className="space-y-1">
+                <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded uppercase font-mono tracking-wider">
+                  📢 BROADCASTING INSTANT QUESTION
+                </span>
+                <h5 className="font-extrabold text-sm text-slate-900 leading-snug">{activeQuestion.questionText}</h5>
               </div>
-              <input 
-                type="url" 
-                placeholder="e.g. https://meet.senf.im/cohort-broadcast"
-                value={webinarUrl}
-                onChange={(e) => setWebinarUrl(e.target.value)}
-                disabled={isWebinarLive}
-                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none disabled:opacity-75 font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* STUDY MATERIAL CAST dropdown */}
-            <div className="space-y-1 text-left">
-              <label className="text-[10px] font-black text-indigo-600 uppercase block flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5" />
-                Cast Live Study Material (Real-time Sync)
-              </label>
-              <select
-                value={castedLessonId}
-                onChange={(e) => handleUpdateCastedLesson(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-bold cursor-pointer"
-              >
-                <option value="">❌ No Study Material Casted (Idle)</option>
-                {courseModules.map((mod) => (
-                  <optgroup key={mod.id} label={mod.title}>
-                    {mod.lessons.map(les => (
-                      <option key={les.id} value={les.id}>{les.title}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <p className="text-[9px] text-slate-400 leading-tight mt-1">Casting a lesson instantly updates all attending students' Classroom dashboard to display this lesson's slides and guidelines side-by-side with your webcam.</p>
-            </div>
-
-            {/* SCREEN SHARER CONTROLLER */}
-            <div className="space-y-1.5 flex flex-col justify-between">
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase block">Media Stream Feed</label>
-                <p className="text-[9px] text-slate-400 leading-tight mt-0.5">Your camera, microphone, and screen sharing are handled natively within the broadcast monitor below. Ensure the webinar is live to begin presenting.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2.5 pt-3 border-t border-slate-100 justify-end">
-            {isWebinarLive ? (
               <button
                 type="button"
-                onClick={handleStopWebinar}
-                className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs sm:text-sm transition shadow-md shadow-rose-100 cursor-pointer"
+                onClick={handleClearQuestion}
+                className="px-3 py-1 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-lg text-xs transition shrink-0 cursor-pointer border border-slate-200"
               >
-                Terminate Active Webinar Live Session
+                End & Clear
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStartWebinar}
-                className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs sm:text-sm transition shadow-md shadow-rose-100 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Radio className="w-4 h-4 animate-pulse" />
-                Launch Webinar & Broadcast
-              </button>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Local Screen Share Preview Screen */}
-        <div className="space-y-2 p-4 bg-slate-950 rounded-2xl text-left">
-          <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
-            <span>📺 BROADCAST MONITOR VIEW (LOCAL PREVIEW)</span>
-            <div className="flex items-center gap-3">
-              {isWebinarLive && webinarUrl && (
-                <a
-                  href={webinarUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 underline font-black"
-                >
-                  Open in New Tab ↗
-                </a>
-              )}
-              <span className="flex items-center gap-1.5">
-                <span className={`w-1.5 h-1.5 rounded-full ${isWebinarLive ? "bg-emerald-500 animate-ping" : "bg-slate-600"}`}></span>
-                {isWebinarLive ? "STREAM ACTIVE" : "PREVIEW OFFLINE"}
+            {/* Live Statistics & Progress Bars */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <span>📊 Real-time Poll Breakdown</span>
+                <span className="text-rose-600 font-mono animate-pulse flex items-center gap-1">
+                  <span className="w-2 h-2 bg-rose-600 rounded-full animate-ping"></span>
+                  Live ({liveResponses.filter(r => r.questionId === activeQuestion.id).length} responses)
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {activeQuestion.options.map((opt: string, oIdx: number) => {
+                  const votes = liveResponses.filter(r => r.questionId === activeQuestion.id && r.selectedOptionIndex === oIdx);
+                  const totalVotes = liveResponses.filter(r => r.questionId === activeQuestion.id).length;
+                  const percent = totalVotes > 0 
+                    ? Math.round((votes.length / totalVotes) * 100) 
+                    : 0;
+                  const isCorrect = oIdx === activeQuestion.correctAnswer;
+
+                  return (
+                    <div key={oIdx} className="space-y-1">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                          <span className="font-black text-slate-400">{String.fromCharCode(65 + oIdx)}.</span>
+                          {opt}
+                          {isCorrect && (
+                            <span className="text-[9px] font-black bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-mono flex items-center gap-0.5">
+                              <Check className="w-3 h-3 text-emerald-600" /> Answer
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-mono font-bold text-slate-800">
+                          {percent}% ({votes.length})
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isCorrect ? "bg-emerald-500" : "bg-indigo-500"
+                          }`}
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* List of active student submissions */}
+            <div className="pt-3 border-t border-slate-200">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">
+                👤 Submissions Feed
               </span>
+              
+              {liveResponses.filter(r => r.questionId === activeQuestion.id).length === 0 ? (
+                <p className="text-[11px] text-slate-400 italic">Waiting for attending students to vote...</p>
+              ) : (
+                <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
+                  {liveResponses.filter(r => r.questionId === activeQuestion.id).map((res: any) => (
+                    <div key={res.id} className="flex justify-between items-center text-[11px] py-1 border-b border-slate-100">
+                      <span className="font-bold text-slate-800">
+                        {res.studentName || "Anonymous Student"} 
+                        <span className="text-[9px] text-slate-400 font-mono font-normal ml-1">({res.studentEmail})</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-500">
+                          Chose {String.fromCharCode(65 + res.selectedOptionIndex)}
+                        </span>
+                        {res.isCorrect ? (
+                          <span className="bg-emerald-50 text-emerald-700 text-[8px] font-black px-1.5 rounded uppercase font-mono">
+                            Correct
+                          </span>
+                        ) : (
+                          <span className="bg-rose-50 text-rose-700 text-[8px] font-black px-1.5 rounded uppercase font-mono">
+                            Incorrect
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-          
-          {/* LOBBY ADMISSION REQUESTS FOR WEBINAR TRAINER */}
-          {isWebinarLive && pendingRequests.length > 0 && (
-            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 shadow-2xl relative overflow-hidden text-left my-2">
-              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600" />
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 font-mono">
-                    🔔 {pendingRequests.length} Student{pendingRequests.length > 1 ? 's' : ''} Knocking in Lobby
-                  </span>
-                </div>
-                <button 
-                  onClick={async () => {
-                    for (const req of pendingRequests) {
-                      await handleApproveRequest(req.id);
-                    }
-                  }}
-                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 text-[9px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition"
-                >
-                  Admit All
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[150px] overflow-y-auto">
-                {pendingRequests.map((req) => (
-                  <div key={req.id} className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between gap-3 text-left">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-full bg-indigo-600/20 text-indigo-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
-                        {req.studentName ? req.studentName.charAt(0) : 'S'}
-                      </div>
-                      <div className="min-w-0">
-                        <h6 className="font-bold text-xs text-white truncate">{req.studentName}</h6>
-                        <p className="text-[9px] text-slate-500 truncate">{req.studentEmail}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-1.5 shrink-0">
-                      <button
-                        onClick={() => handleApproveRequest(req.id)}
-                        className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide rounded-lg cursor-pointer transition shadow"
-                      >
-                        Admit
-                      </button>
-                      <button
-                        onClick={() => handleRejectRequest(req.id)}
-                        className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 text-[10px] font-black uppercase tracking-wide rounded-lg cursor-pointer transition"
-                      >
-                        Decline
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {(() => {
-            const activeCastedLesson = isWebinarLive && castedLessonId 
-              ? courseModules.flatMap(m => m.lessons).find(l => l.id === castedLessonId)
-              : null;
-              
-            return (
-              <div className={`grid gap-4 ${activeCastedLesson ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
-                <div className={`bg-black rounded-xl overflow-hidden relative flex items-center justify-center text-slate-500 text-xs border border-slate-800 ${activeCastedLesson ? 'aspect-[4/3]' : 'aspect-video'}`}>
-                  {isWebinarLive && webinarUrl ? (
-                    <iframe
-                      allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                      src={getJitsiUrl(webinarUrl, "Instructor Mike")}
-                      className="w-full h-full border-0"
-                      title="Webinar Broadcast Studio"
-                    />
-                  ) : (
-                    <div className="text-center space-y-2 p-6">
-                      <Laptop className="w-10 h-10 mx-auto text-slate-700" />
-                      <p className="font-bold">Webinar is currently offline.</p>
-                      <p className="text-[10px] text-slate-600 max-w-xs mx-auto">Launch the webinar above to start streaming your camera and screen.</p>
-                    </div>
-                  )}
-                </div>
-                
-                {activeCastedLesson && (
-                  <div className="bg-slate-900 rounded-xl overflow-y-auto max-h-[500px] border border-slate-800 p-5 text-slate-300 relative shadow-inner flex flex-col min-h-[300px]">
-                    <div className="sticky top-0 bg-slate-900 pb-3 border-b border-slate-800 mb-4 flex flex-col sm:flex-row gap-2 justify-between items-start sm:items-center z-10">
-                      <h4 className="font-bold text-sm text-indigo-400 flex items-center gap-2">
-                        <Layers className="w-4 h-4" /> 
-                        Teaching Reference
-                      </h4>
-                      <span className="text-[9px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-1 rounded uppercase tracking-widest">
-                        Casting to Students
-                      </span>
-                    </div>
-                    
-                    <h2 className="text-2xl font-black text-white mb-4">{activeCastedLesson.title}</h2>
-                    
-                    <div className="space-y-4 text-sm leading-relaxed text-slate-300 pb-6">
-                      {activeCastedLesson.markdownContent.split("\n\n").map((block, idx) => {
-                        if (block.startsWith("# ")) {
-                          return <h3 key={idx} className="text-xl font-bold text-white mt-6 mb-2">{block.replace("# ", "")}</h3>;
-                        } else if (block.startsWith("## ")) {
-                          return <h4 key={idx} className="text-lg font-bold text-slate-100 mt-5 mb-2">{block.replace("## ", "")}</h4>;
-                        } else if (block.startsWith("### ")) {
-                          return <h5 key={idx} className="text-base font-bold text-slate-200 mt-4 mb-2">{block.replace("### ", "")}</h5>;
-                        } else if (block.startsWith("- ")) {
-                          return (
-                            <ul key={idx} className="list-disc pl-5 space-y-1 mb-4 marker:text-indigo-500">
-                              {block.split("\n").map((item, i) => (
-                                <li key={i}>{item.replace("- ", "")}</li>
-                              ))}
-                            </ul>
-                          );
-                        } else if (block.startsWith("> ")) {
-                          return (
-                            <blockquote key={idx} className="border-l-4 border-indigo-500 pl-4 py-1 my-4 bg-indigo-950/30 italic text-slate-300 rounded-r-lg">
-                              {block.replace("> ", "")}
-                            </blockquote>
-                          );
-                        }
-                        return <p key={idx} className="mb-4">{block}</p>;
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
+        )}
       </div>
 
     </div>

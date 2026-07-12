@@ -6,11 +6,7 @@
 export function getJitsiUrl(url: string, displayName?: string): string {
   if (!url) return "";
 
-  // Automatically map meet.ffmuc.net to meet.senf.im for excellent iframe embedding compatibility
   let normalizedUrl = url;
-  if (normalizedUrl.includes("meet.ffmuc.net")) {
-    normalizedUrl = normalizedUrl.replace("meet.ffmuc.net", "meet.senf.im");
-  }
 
   // Extract base URL and existing hash parameters
   const hashIndex = normalizedUrl.indexOf("#");

@@ -30,7 +30,8 @@ import {
   deleteDoc, 
   updateDoc, 
   query, 
-  orderBy 
+  orderBy,
+  where 
 } from "firebase/firestore";
 
 interface LiveBroadcastStudioProps {
@@ -62,6 +63,57 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+
+  // Student Admission Lobby states & hooks
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!isWebinarLive || !webinarUrl) {
+      setPendingRequests([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, "live_class_join_requests"),
+      where("meetingUrl", "==", webinarUrl),
+      where("status", "==", "pending")
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const requests: any[] = [];
+      snapshot.forEach((docSnap) => {
+        requests.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      requests.sort((a, b) => new Date(a.requestedAt || 0).getTime() - new Date(b.requestedAt || 0).getTime());
+      setPendingRequests(requests);
+    }, (err) => {
+      console.error("Error listening to student join requests:", err);
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [webinarUrl, isWebinarLive]);
+
+  const handleApproveRequest = async (reqId: string) => {
+    try {
+      await setDoc(doc(db, "live_class_join_requests", reqId), {
+        status: "approved"
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error approving request:", err);
+    }
+  };
+
+  const handleRejectRequest = async (reqId: string) => {
+    try {
+      await setDoc(doc(db, "live_class_join_requests", reqId), {
+        status: "rejected"
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error rejecting request:", err);
+    }
+  };
 
   // Poll & Question states
   const [pollQuestion, setPollQuestion] = useState("");
@@ -201,7 +253,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setMeetingUrl(`https://meet.jit.si/${segment1}-${segment2}-${segment3}`);
+    setMeetingUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
   };
 
   const handleGenerateWebinarMeetLink = () => {
@@ -209,7 +261,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
     const segment1 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const segment3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setWebinarUrl(`https://meet.jit.si/${segment1}-${segment2}-${segment3}`);
+    setWebinarUrl(`https://meet.ffmuc.net/${segment1}-${segment2}-${segment3}`);
   };
 
   // Dispatch interactive meeting
@@ -270,7 +322,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
       const liveData = {
         active: true,
         topic: webinarTopic.trim(),
-        meetingUrl: webinarUrl.trim() || `https://meet.jit.si/cohort-broadcast-room-${Date.now()}`,
+        meetingUrl: webinarUrl.trim() || `https://meet.ffmuc.net/cohort-broadcast-room-${Date.now()}`,
         castedLessonId: castedLessonId || "none",
         screenSharingActive: screenSharingActive,
         startedAt: new Date().toISOString(),
@@ -471,7 +523,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
             </div>
             <input 
               type="url" 
-              placeholder="e.g. https://meet.jit.si/my-meeting-room"
+              placeholder="e.g. https://meet.ffmuc.net/my-meeting-room"
               value={meetingUrl}
               onChange={(e) => setMeetingUrl(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-950 focus:outline-none focus:ring-4 focus:ring-indigo-50 font-mono"
@@ -857,7 +909,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
                   </div>
                   <div>
                     <h4 className="font-extrabold text-xs uppercase tracking-widest text-indigo-800">Moderator Control Center</h4>
-                    <p className="text-[10px] text-indigo-600 font-medium">Initialize meeting room security & moderation permissions</p>
+                    <p className="text-[10px] text-indigo-600 font-medium">Classroom hosted on secure open-source server (meet.ffmuc.net)</p>
                   </div>
                 </div>
 
@@ -872,20 +924,19 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
               </div>
               
               <div className="text-[11px] text-slate-700 space-y-2.5 leading-relaxed">
-                <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl space-y-1">
-                  <span className="font-bold text-[10px] text-amber-800 block uppercase tracking-wider">⚠️ CRITICAL: Host Authentication Required</span>
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl space-y-1">
+                  <span className="font-bold text-[10px] text-emerald-800 block uppercase tracking-wider">✅ Seamless Access Enabled</span>
                   <p className="text-slate-600 text-[10px] leading-normal">
-                    Due to browser iframe security restrictions, you <strong>cannot sign in as host inside the iframe below</strong>. 
-                    You must click the <strong>Launch Host Workspace (New Tab)</strong> button above, then click <strong>"Log-in"</strong> on the Jitsi page to authenticate (with Google, GitHub, or Facebook) and start the meeting.
+                    We've routed your classroom through the free, open-source <strong>meet.ffmuc.net</strong> server. This completely bypasses Jitsi's 8x8 login requirements! You and your students can connect instantly inside the frame without needing accounts.
                   </p>
                 </div>
 
                 <div className="p-3 bg-white border border-indigo-100 rounded-xl space-y-1">
-                  <span className="font-bold text-[10px] text-indigo-700 block uppercase tracking-wider">👉 How to Approve / Accept Students:</span>
+                  <span className="font-bold text-[10px] text-indigo-700 block uppercase tracking-wider">👉 How to Approve / Accept Students (Optional):</span>
                   <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[10px]">
-                    <li>In the new Jitsi tab, click the <strong>Security Shield</strong> icon on the bottom right.</li>
-                    <li>Toggle on <strong>Enable Lobby Mode</strong>. Students will now have to "knock" to enter.</li>
-                    <li>Whenever students try to join, a prompt will pop up in your workspace allowing you to <strong>Grant Entry</strong> or <strong>Reject</strong> them!</li>
+                    <li>Click the <strong>Launch Host Workspace (New Tab)</strong> button above to open the main meeting workspace.</li>
+                    <li>Click the <strong>Security Shield</strong> icon on the bottom right of the meeting.</li>
+                    <li>Toggle on <strong>Enable Lobby Mode</strong>. Entering students will now need your approval to join.</li>
                   </ol>
                 </div>
               </div>
@@ -940,7 +991,7 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
               </div>
               <input 
                 type="url" 
-                placeholder="e.g. https://meet.jit.si/cohort-broadcast"
+                placeholder="e.g. https://meet.ffmuc.net/cohort-broadcast"
                 value={webinarUrl}
                 onChange={(e) => setWebinarUrl(e.target.value)}
                 disabled={isWebinarLive}
@@ -1026,6 +1077,62 @@ export default function LiveBroadcastStudio({ courseModules, students, onJoinMee
             </div>
           </div>
           
+          {/* LOBBY ADMISSION REQUESTS FOR WEBINAR TRAINER */}
+          {isWebinarLive && pendingRequests.length > 0 && (
+            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 shadow-2xl relative overflow-hidden text-left my-2">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 font-mono">
+                    🔔 {pendingRequests.length} Student{pendingRequests.length > 1 ? 's' : ''} Knocking in Lobby
+                  </span>
+                </div>
+                <button 
+                  onClick={async () => {
+                    for (const req of pendingRequests) {
+                      await handleApproveRequest(req.id);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 text-[9px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition"
+                >
+                  Admit All
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[150px] overflow-y-auto">
+                {pendingRequests.map((req) => (
+                  <div key={req.id} className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between gap-3 text-left">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-indigo-600/20 text-indigo-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                        {req.studentName ? req.studentName.charAt(0) : 'S'}
+                      </div>
+                      <div className="min-w-0">
+                        <h6 className="font-bold text-xs text-white truncate">{req.studentName}</h6>
+                        <p className="text-[9px] text-slate-500 truncate">{req.studentEmail}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleApproveRequest(req.id)}
+                        className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide rounded-lg cursor-pointer transition shadow"
+                      >
+                        Admit
+                      </button>
+                      <button
+                        onClick={() => handleRejectRequest(req.id)}
+                        className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 text-[10px] font-black uppercase tracking-wide rounded-lg cursor-pointer transition"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(() => {
             const activeCastedLesson = isWebinarLive && castedLessonId 
               ? courseModules.flatMap(m => m.lessons).find(l => l.id === castedLessonId)

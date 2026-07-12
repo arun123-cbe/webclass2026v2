@@ -24,7 +24,9 @@ import {
   Shield,
   Activity,
   User,
-  BookOpen
+  BookOpen,
+  Lock,
+  ShieldAlert
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
@@ -75,6 +77,127 @@ export default function InAppMeetingRoom({
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [activeTab, setActiveTab] = useState<"chat" | "participants" | "notes" | "polls">("chat");
+
+  // Admission and custom lobby states
+  const [approvalStatus, setApprovalStatus] = useState<"loading" | "pending" | "approved" | "rejected">(
+    isTrainer ? "approved" : "loading"
+  );
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+
+  // 1. Student admission logic
+  useEffect(() => {
+    if (isTrainer) {
+      setApprovalStatus("approved");
+      return;
+    }
+
+    // Generate a unique request ID for this student and meeting room
+    const safeEmail = studentEmail.replace(/[^a-zA-Z0-9]/g, "_");
+    const safeUrl = meetingUrl.replace(/[^a-zA-Z0-9]/g, "_");
+    const reqDocId = `join_${safeEmail}_${safeUrl}`;
+
+    const docRef = doc(db, "live_class_join_requests", reqDocId);
+
+    // Write the request to Firestore
+    setDoc(docRef, {
+      id: reqDocId,
+      studentName,
+      studentEmail,
+      meetingUrl,
+      status: "pending",
+      requestedAt: new Date().toISOString()
+    }, { merge: true }).then(() => {
+      setApprovalStatus("pending");
+    }).catch(err => {
+      console.error("Error setting join request:", err);
+      // Fallback to approved if Firestore fails to load
+      setApprovalStatus("approved");
+    });
+
+    // Listen to changes in the request status
+    const unsub = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.status) {
+          setApprovalStatus(data.status);
+        }
+      } else {
+        setApprovalStatus("pending");
+      }
+    }, (err) => {
+      console.error("onSnapshot error:", err);
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [meetingUrl, studentEmail, studentName, isTrainer]);
+
+  // 2. Trainer listening to pending join requests
+  useEffect(() => {
+    if (!isTrainer) return;
+
+    const q = query(
+      collection(db, "live_class_join_requests"),
+      where("meetingUrl", "==", meetingUrl),
+      where("status", "==", "pending")
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const requests: any[] = [];
+      snapshot.forEach((docSnap) => {
+        requests.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      // Sort by requestedAt
+      requests.sort((a, b) => new Date(a.requestedAt || 0).getTime() - new Date(b.requestedAt || 0).getTime());
+      setPendingRequests(requests);
+    }, (err) => {
+      console.error("Error fetching pending requests:", err);
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [meetingUrl, isTrainer]);
+
+  const handleApproveRequest = async (reqId: string) => {
+    try {
+      await setDoc(doc(db, "live_class_join_requests", reqId), {
+        status: "approved"
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error approving request:", err);
+    }
+  };
+
+  const handleRejectRequest = async (reqId: string) => {
+    try {
+      await setDoc(doc(db, "live_class_join_requests", reqId), {
+        status: "rejected"
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error rejecting request:", err);
+    }
+  };
+
+  const handleReRequestJoin = async () => {
+    if (isTrainer) return;
+    setApprovalStatus("loading");
+    const safeEmail = studentEmail.replace(/[^a-zA-Z0-9]/g, "_");
+    const safeUrl = meetingUrl.replace(/[^a-zA-Z0-9]/g, "_");
+    const reqDocId = `join_${safeEmail}_${safeUrl}`;
+    
+    try {
+      await setDoc(doc(db, "live_class_join_requests", reqDocId), {
+        status: "pending",
+        requestedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error re-requesting join:", err);
+      setApprovalStatus("approved");
+    }
+  };
+
   const [teachingNotes, setTeachingNotes] = useState(() => {
     return localStorage.getItem("coimbatore_teaching_notes") || "";
   });
@@ -592,7 +715,84 @@ export default function InAppMeetingRoom({
       </div>
 
       {/* MAIN CONTAINER GRID */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12">
+      {!isTrainer && approvalStatus !== "approved" ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-center space-y-6">
+          {approvalStatus === "loading" ? (
+            <div className="space-y-4 flex flex-col items-center">
+              <div className="w-16 h-16 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin mb-2" />
+              <p className="text-sm font-black uppercase tracking-widest text-indigo-400 font-mono">Initializing connection...</p>
+            </div>
+          ) : approvalStatus === "rejected" ? (
+            <div className="max-w-md p-8 bg-slate-900 border border-rose-500/30 rounded-[24px] space-y-5 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-rose-500 to-amber-500" />
+              <div className="w-14 h-14 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mx-auto">
+                <ShieldAlert className="w-7 h-7" />
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-base font-black uppercase tracking-wider text-white">Join Request Declined</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your request to join <strong>{meetingTitle}</strong> was declined by the trainer. Please verify your credentials or try again.
+                </p>
+              </div>
+              <div className="p-3 bg-slate-950/50 rounded-xl text-[11px] text-slate-500 font-mono space-y-1 text-left">
+                <div><span className="text-slate-400">Name:</span> {studentName}</div>
+                <div><span className="text-slate-400">Email:</span> {studentEmail}</div>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={handleReRequestJoin}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-xl cursor-pointer transition shadow-md flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw className="w-4 h-4 animate-spin-slow" /> Request Access Again
+                </button>
+                <button
+                  onClick={onLeave}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-black rounded-xl cursor-pointer transition"
+                >
+                  Leave Room
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-md p-8 bg-slate-900 border border-slate-800 rounded-[24px] space-y-6 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600" />
+              
+              <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-indigo-500/5 animate-ping" />
+                <div className="absolute inset-2 rounded-full bg-indigo-500/10 animate-pulse" />
+                <div className="relative w-14 h-14 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center">
+                  <Lock className="w-6 h-6 animate-pulse" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-base font-black uppercase tracking-wider text-white">Knocking at the Gate...</h4>
+                <span className="inline-block px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-black rounded-full uppercase tracking-widest font-mono">
+                  Awaiting Trainer Admission
+                </span>
+                <p className="text-xs text-slate-400 leading-relaxed pt-2">
+                  Instructor Mike Vance has been notified. You will automatically join the live stream the moment your request is approved.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-950/50 rounded-xl text-[11px] text-slate-500 font-mono space-y-1 text-left">
+                <div><span className="text-slate-400">Requesting As:</span> {studentName}</div>
+                <div><span className="text-slate-400">Email:</span> {studentEmail}</div>
+              </div>
+
+              <div className="flex gap-2.5 justify-center pt-2">
+                <button
+                  onClick={onLeave}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-black rounded-xl cursor-pointer transition flex items-center justify-center gap-1.5"
+                >
+                  <X className="w-4 h-4" /> Cancel & Leave Room
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12">
         
         {/* LEFT VIEWPORT CANVAS (Active Panel Content) */}
         <div className="lg:col-span-8 bg-slate-950 flex flex-col min-h-0 relative border-r border-slate-800/80">
@@ -644,6 +844,62 @@ export default function InAppMeetingRoom({
             )}
           </AnimatePresence>
           
+          {/* TRAINER REAL-TIME LOBBY ADMISSION REQUESTS OVERLAY */}
+          {isTrainer && pendingRequests.length > 0 && (
+            <div className="mx-4 mt-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 shadow-2xl relative overflow-hidden z-30">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 font-mono">
+                    🔔 {pendingRequests.length} Student{pendingRequests.length > 1 ? 's' : ''} Knocking in Lobby
+                  </span>
+                </div>
+                <button 
+                  onClick={async () => {
+                    for (const req of pendingRequests) {
+                      await handleApproveRequest(req.id);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 text-[9px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition"
+                >
+                  Admit All
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[150px] overflow-y-auto pt-1">
+                {pendingRequests.map((req) => (
+                  <div key={req.id} className="p-2.5 bg-slate-950/60 border border-slate-800/80 rounded-xl flex items-center justify-between gap-3 text-left">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-indigo-600/20 text-indigo-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                        {req.studentName ? req.studentName.charAt(0) : 'S'}
+                      </div>
+                      <div className="min-w-0">
+                        <h6 className="font-bold text-xs text-white truncate">{req.studentName}</h6>
+                        <p className="text-[9px] text-slate-500 truncate">{req.studentEmail}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleApproveRequest(req.id)}
+                        className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide rounded-lg cursor-pointer transition shadow"
+                      >
+                        Admit
+                      </button>
+                      <button
+                        onClick={() => handleRejectRequest(req.id)}
+                        className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 text-[10px] font-black uppercase tracking-wide rounded-lg cursor-pointer transition"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
           {/* VIEWPORT 1: MAIN WEBINAR ROOM */}
           {activePanel === "room" && (
             <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto min-h-0">
@@ -656,12 +912,12 @@ export default function InAppMeetingRoom({
                     <span>In-App Live Streaming Arena</span>
                   </div>
                   <p className="text-[10px] text-slate-400 leading-normal max-w-xl">
-                    Because of security constraints, Jitsi Meet requires the Instructor to start the session first. If you are stuck at "Waiting for moderator" or get iframe errors, you can launch the classroom cleanly in a new tab!
+                    Our live stream is hosted on a secure, open meeting server (meet.ffmuc.net) with no login required. If you experience browser iframe blocks, you can launch the session cleanly in a new tab!
                   </p>
                 </div>
                 
                 <a 
-                  href={meetingUrl || `https://meet.jit.si/cohort-room-default`}
+                  href={meetingUrl || `https://meet.ffmuc.net/cohort-room-default`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl cursor-pointer flex items-center gap-1 transition shrink-0"
@@ -674,7 +930,7 @@ export default function InAppMeetingRoom({
               <div className="flex-1 min-h-[400px] bg-slate-900 border border-slate-850 rounded-2xl overflow-hidden relative shadow-lg flex items-center justify-center">
                 <iframe
                   allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
-                  src={getJitsiUrl(meetingUrl || `https://meet.jit.si/cohort-room-default`, studentName)}
+                  src={getJitsiUrl(meetingUrl || `https://meet.ffmuc.net/cohort-room-default`, studentName)}
                   style={{ width: '100%', height: '100%', border: '0px' }}
                 ></iframe>
               </div>
@@ -968,6 +1224,55 @@ export default function InAppMeetingRoom({
           {/* PARTICIPANTS TAB WINDOW */}
           {activeTab === "participants" && (
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              
+              {/* Lobby / Admission Queue for Trainer */}
+              {isTrainer && (
+                <div className="space-y-2 pb-2.5 border-b border-slate-800">
+                  <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono">
+                    <span>⏳ Waiting Lobby ({pendingRequests.length})</span>
+                    {pendingRequests.length > 0 && (
+                      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping" />
+                    )}
+                  </div>
+                  
+                  {pendingRequests.length === 0 ? (
+                    <p className="text-[10px] text-slate-500 italic py-1 text-left">No students waiting in lobby</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {pendingRequests.map((req) => (
+                        <div key={req.id} className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between text-left text-xs">
+                          <div className="min-w-0 flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-amber-500/10 text-amber-400 font-mono font-bold text-[10px] flex items-center justify-center shrink-0">
+                              {req.studentName ? req.studentName.charAt(0) : 'S'}
+                            </div>
+                            <div className="min-w-0">
+                              <h6 className="font-bold text-slate-200 truncate text-[11px]">{req.studentName}</h6>
+                              <p className="text-[9px] text-slate-500 truncate">{req.studentEmail}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => handleApproveRequest(req.id)}
+                              className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg cursor-pointer transition text-[9px] font-bold"
+                              title="Admit"
+                            >
+                              Admit
+                            </button>
+                            <button
+                              onClick={() => handleRejectRequest(req.id)}
+                              className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500 text-rose-455 hover:text-white rounded-lg cursor-pointer transition text-[9px] font-bold"
+                              title="Decline"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* Student Scholar Himself */}
               <div className="p-3 bg-indigo-950/20 border border-indigo-900/40 rounded-xl flex items-center justify-between text-left text-xs">
@@ -1387,8 +1692,8 @@ export default function InAppMeetingRoom({
           )}
 
         </div>
-
       </div>
+    )}
 
     </div>
   );
